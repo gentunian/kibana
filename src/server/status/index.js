@@ -1,52 +1,60 @@
-import _ from 'lodash';
-import ServerStatus from './server_status';
-import wrapAuthConfig from './wrap_auth_config';
-import { join } from 'path';
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
 
-export default function (kbnServer, server, config) {
+import ServerStatus from './server_status';
+import { Metrics } from './lib/metrics';
+import { registerStatusPage, registerStatusApi, registerStatsApi } from './routes';
+import { getOpsStatsCollector } from './collectors';
+import Oppsy from 'oppsy';
+import { cloneDeep } from 'lodash';
+import { getOSInfo } from './lib/get_os_info';
+
+export function statusMixin(kbnServer, server, config) {
   kbnServer.status = new ServerStatus(kbnServer.server);
 
-  if (server.plugins['even-better']) {
-    kbnServer.mixin(require('./metrics'));
-  }
+  const statsCollector = getOpsStatsCollector(server, kbnServer);
+  const { collectorSet } = server.usage;
+  collectorSet.register(statsCollector);
 
-  const wrapAuth = wrapAuthConfig(config.get('status.allowAnonymous'));
+  const metrics = new Metrics(config, server);
 
-  server.route(wrapAuth({
-    method: 'GET',
-    path: '/api/status',
-    handler: function (request, reply) {
-      return reply({
-        name: config.get('server.name'),
-        version: config.get('pkg.version'),
-        buildNum: config.get('pkg.buildNum'),
-        buildSha: config.get('pkg.buildSha'),
-        uuid: config.get('server.uuid'),
-        status: kbnServer.status.toJSON(),
-        metrics: kbnServer.metrics
-      });
-    }
-  }));
+  const oppsy = new Oppsy(server);
+  oppsy.on('ops', event => {
+    // Oppsy has a bad race condition that will modify this data before
+    // we ship it off to the buffer. Let's create our copy first.
+    event = cloneDeep(event);
+    // Oppsy used to provide this, but doesn't anymore. Grab it ourselves.
+    server.listener.getConnections((_, count) => {
+      event.concurrent_connections = count;
 
-  server.decorate('reply', 'renderStatusPage', async function () {
-    const app = kbnServer.uiExports.getHiddenApp('status_page');
-    const response = await getResponse(this);
-    response.code(kbnServer.status.isGreen() ? 200 : 503);
-    return response;
-
-    function getResponse(ctx) {
-      if (app) {
-        return ctx.renderApp(app);
-      }
-      return ctx(kbnServer.status.toString());
-    }
+      // captures (performs transforms on) the latest event data and stashes
+      // the metrics for status/stats API payload
+      metrics.capture(event).then(data => { kbnServer.metrics = data; });
+    });
   });
+  oppsy.start(config.get('ops.interval'));
 
-  server.route(wrapAuth({
-    method: 'GET',
-    path: '/status',
-    handler: function (request, reply) {
-      return reply.renderStatusPage();
-    }
-  }));
+  // init routes
+  registerStatusPage(kbnServer, server, config);
+  registerStatusApi(kbnServer, server, config);
+  registerStatsApi(kbnServer, server, config);
+
+  // expore shared functionality
+  server.decorate('server', 'getOSInfo', getOSInfo);
 }

@@ -1,22 +1,37 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import d3 from 'd3';
-import angular from 'angular';
 import _ from 'lodash';
 import ngMock from 'ng_mock';
 import expect from 'expect.js';
 import $ from 'jquery';
-import VislibLibDataProvider from 'ui/vislib/lib/data';
-import 'ui/persisted_state';
-import VislibLibAxisProvider from 'ui/vislib/lib/axis';
-import VislibVisConfig from 'ui/vislib/lib/vis_config';
+import '../../../persisted_state';
+import { VislibLibAxisProvider } from '../../lib/axis';
+import { VislibVisConfigProvider } from '../../lib/vis_config';
 
 describe('Vislib xAxis Class Test Suite', function () {
   let Axis;
-  let Data;
   let persistedState;
   let xAxis;
   let el;
   let fixture;
-  let dataObj;
   let VisConfig;
   const data = {
     hits: 621,
@@ -82,13 +97,12 @@ describe('Vislib xAxis Class Test Suite', function () {
 
   beforeEach(ngMock.module('kibana'));
   beforeEach(ngMock.inject(function (Private, $injector) {
-    Data = Private(VislibLibDataProvider);
     persistedState = new ($injector.get('PersistedState'))();
     Axis = Private(VislibLibAxisProvider);
-    VisConfig = Private(VislibVisConfig);
+    VisConfig = Private(VislibVisConfigProvider);
 
     el = d3.select('body').append('div')
-      .attr('class', 'x-axis-wrapper')
+      .attr('class', 'visAxis--x')
       .style('height', '40px');
 
     fixture = el.append('div')
@@ -127,11 +141,7 @@ describe('Vislib xAxis Class Test Suite', function () {
   });
 
   describe('getScale, getDomain, getTimeDomain, and getRange Methods', function () {
-    let ordered;
     let timeScale;
-    let timeDomain;
-    let ordinalScale;
-    let ordinalDomain;
     let width;
     let range;
 
@@ -139,7 +149,6 @@ describe('Vislib xAxis Class Test Suite', function () {
       width = $('.x-axis-div').width();
       xAxis.getAxis(width);
       timeScale = xAxis.getScale();
-      timeDomain = xAxis.axisScale.getExtents();
       range = xAxis.axisScale.getRange(width);
     });
 
@@ -183,7 +192,7 @@ describe('Vislib xAxis Class Test Suite', function () {
     });
 
     it('should return an array of values', function () {
-      expect(_.isArray(ordinalDomain.domain())).to.be(true);
+      expect(Array.isArray(ordinalDomain.domain())).to.be(true);
     });
   });
 
@@ -214,7 +223,6 @@ describe('Vislib xAxis Class Test Suite', function () {
 
   describe('getXAxis Method', function () {
     let width;
-    let axis;
 
     beforeEach(function () {
       width = $('.x-axis-div').width();
@@ -231,5 +239,4 @@ describe('Vislib xAxis Class Test Suite', function () {
       expect(_.isFunction(xAxis.draw())).to.be(true);
     });
   });
-
 });

@@ -1,14 +1,32 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import d3 from 'd3';
-import angular from 'angular';
 import _ from 'lodash';
+import $ from 'jquery';
 import ngMock from 'ng_mock';
 import expect from 'expect.js';
-import $ from 'jquery';
-import VislibLibAxisTitleProvider from 'ui/vislib/lib/axis/axis_title';
-import VislibLibAxisConfigProvider from 'ui/vislib/lib/axis/axis_config';
-import VislibLibVisConfigProvider from 'ui/vislib/lib/vis_config';
-import VislibLibDataProvider from 'ui/vislib/lib/data';
-import 'ui/persisted_state';
+import { VislibLibAxisTitleProvider } from '../../lib/axis/axis_title';
+import { VislibLibAxisConfigProvider } from '../../lib/axis/axis_config';
+import { VislibVisConfigProvider } from '../../lib/vis_config';
+import { VislibLibDataProvider } from '../../lib/data';
+import '../../../persisted_state';
 
 describe('Vislib AxisTitle Class Test Suite', function () {
   let AxisTitle;
@@ -16,11 +34,11 @@ describe('Vislib AxisTitle Class Test Suite', function () {
   let VisConfig;
   let Data;
   let PersistedState;
-  let axisTitle;
   let el;
   let dataObj;
   let xTitle;
   let yTitle;
+  let visConfig;
   const data = {
     hits: 621,
     ordered: {
@@ -84,30 +102,30 @@ describe('Vislib AxisTitle Class Test Suite', function () {
   beforeEach(ngMock.inject(function (Private, $injector) {
     AxisTitle = Private(VislibLibAxisTitleProvider);
     AxisConfig = Private(VislibLibAxisConfigProvider);
-    VisConfig = Private(VislibLibVisConfigProvider);
+    VisConfig = Private(VislibVisConfigProvider);
     Data = Private(VislibLibDataProvider);
     PersistedState = $injector.get('PersistedState');
 
     el = d3.select('body').append('div')
-      .attr('class', 'vis-wrapper');
+      .attr('class', 'visWrapper');
 
     el.append('div')
-      .attr('class', 'axis-wrapper-bottom')
+      .attr('class', 'visAxis__column--bottom')
       .append('div')
-        .attr('class', 'axis-title y-axis-title')
-        .style('height', '20px')
-        .style('width', '20px');
+      .attr('class', 'axis-title y-axis-title')
+      .style('height', '20px')
+      .style('width', '20px');
 
     el.append('div')
-      .attr('class', 'axis-wrapper-left')
+      .attr('class', 'visAxis__column--left')
       .append('div')
-        .attr('class', 'axis-title x-axis-title')
-        .style('height', '20px')
-        .style('width', '20px');
+      .attr('class', 'axis-title x-axis-title')
+      .style('height', '20px')
+      .style('width', '20px');
 
 
     dataObj = new Data(data, new PersistedState());
-    const visConfig = new VisConfig({
+    visConfig = new VisConfig({
       type: 'histogram'
     }, data, new PersistedState(), el.node());
     const xAxisConfig = new AxisConfig(visConfig, {
@@ -128,6 +146,19 @@ describe('Vislib AxisTitle Class Test Suite', function () {
 
   afterEach(function () {
     el.remove();
+  });
+
+  it('should not do anything if title.show is set to false', function () {
+    const xAxisConfig = new AxisConfig(visConfig, {
+      position: 'bottom',
+      show: false,
+      title: {
+        text: dataObj.get('xAxisLabel')
+      }
+    });
+    xTitle = new AxisTitle(xAxisConfig);
+    xTitle.render();
+    expect($(el.node()).find('.x-axis-title').find('svg').length).to.be(0);
   });
 
   describe('render Method', function () {
@@ -157,5 +188,4 @@ describe('Vislib AxisTitle Class Test Suite', function () {
       expect(_.isFunction(xTitle.draw())).to.be(true);
     });
   });
-
 });

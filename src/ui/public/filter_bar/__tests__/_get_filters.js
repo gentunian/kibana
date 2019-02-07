@@ -1,15 +1,34 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import _ from 'lodash';
 import ngMock from 'ng_mock';
 import expect from 'expect.js';
 import MockState from 'fixtures/mock_state';
-import FilterBarQueryFilterProvider from 'ui/filter_bar/query_filter';
+import { FilterBarQueryFilterProvider } from '../query_filter';
+
 describe('get filters', function () {
   const storeNames = {
     app: 'appState',
     global: 'globalState'
   };
   let queryFilter;
-  let $rootScope;
   let appState;
   let globalState;
 
@@ -30,7 +49,6 @@ describe('get filters', function () {
   ));
 
   beforeEach(ngMock.inject(function (_$rootScope_, Private) {
-    $rootScope = _$rootScope_;
     queryFilter = Private(FilterBarQueryFilterProvider);
   }));
 
@@ -102,7 +120,7 @@ describe('get filters', function () {
         expect(state[0].replace.called).to.be(false);
 
         state[0].filters = filters.slice(0);
-        const res = state[1]();
+        state[1]();
         expect(state[0].save.called).to.be(false);
         expect(state[0].replace.called).to.be(true);
       });

@@ -1,9 +1,28 @@
-import VislibLibLayoutSplitsColumnChartChartSplitProvider from '../splits/column_chart/chart_split';
-import VislibLibLayoutSplitsColumnChartYAxisSplitProvider from '../splits/column_chart/y_axis_split';
-import VislibLibLayoutSplitsColumnChartXAxisSplitProvider from '../splits/column_chart/x_axis_split';
-import VislibLibLayoutSplitsColumnChartChartTitleSplitProvider from '../splits/column_chart/chart_title_split';
-export default function ColumnLayoutFactory(Private) {
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
 
+import { VislibLibLayoutSplitsColumnChartChartSplitProvider } from '../splits/column_chart/chart_split';
+import { VislibLibLayoutSplitsColumnChartYAxisSplitProvider } from '../splits/column_chart/y_axis_split';
+import { VislibLibLayoutSplitsColumnChartXAxisSplitProvider } from '../splits/column_chart/x_axis_split';
+import { VislibLibLayoutSplitsColumnChartChartTitleSplitProvider } from '../splits/column_chart/chart_title_split';
+
+export function VislibLibLayoutTypesColumnLayoutProvider(Private) {
   const chartSplit = Private(VislibLibLayoutSplitsColumnChartChartSplitProvider);
   const yAxisSplit = Private(VislibLibLayoutSplitsColumnChartYAxisSplitProvider);
   const xAxisSplit = Private(VislibLibLayoutSplitsColumnChartXAxisSplitProvider);
@@ -35,88 +54,76 @@ export default function ColumnLayoutFactory(Private) {
       {
         parent: el,
         type: 'div',
-        class: 'vis-wrapper',
+        class: 'visWrapper',
         datum: data,
         children: [
           {
             type: 'div',
-            class: 'y-axis-col-wrapper',
+            class: 'visAxis--y',
             children: [
               {
                 type: 'div',
-                class: 'y-axis-spacer-block y-axis-spacer-block-top'
+                class: 'visAxis__spacer--y visAxis__spacer--y-top'
               },
               {
                 type: 'div',
-                class: 'y-axis-col axis-wrapper-left',
+                class: 'visAxis__column--y visAxis__column--left',
                 children: [
                   {
                     type: 'div',
-                    class: 'y-axis-title axis-title'
-                  },
-                  {
-                    type: 'div',
-                    class: 'y-axis-chart-title',
+                    class: 'visAxis__splitTitles--y',
                     splits: chartTitleSplit
                   },
                   {
                     type: 'div',
-                    class: 'y-axis-div-wrapper',
+                    class: 'visAxis__splitAxes--y',
                     splits: yAxisSplit
                   }
                 ]
               },
               {
                 type: 'div',
-                class: 'y-axis-spacer-block y-axis-spacer-block-bottom'
+                class: 'visAxis__spacer--y visAxis__spacer--y-bottom'
               }
             ]
           },
           {
             type: 'div',
-            class: 'vis-col-wrapper',
+            class: 'visWrapper__column',
             children: [
               {
                 type: 'div',
-                class: 'x-axis-wrapper axis-wrapper-top',
+                class: 'visAxis--x visAxis__column--top',
                 children: [
                   {
                     type: 'div',
-                    class: 'x-axis-title axis-title'
-                  },
-                  {
-                    type: 'div',
-                    class: 'x-axis-div-wrapper',
+                    class: 'visAxis__splitAxes--x',
                     splits: xAxisSplit
                   }
                 ]
               },
               {
                 type: 'div',
-                class: 'chart-wrapper',
+                class: 'visWrapper__chart',
                 splits: chartSplit
               },
               {
                 type: 'div',
-                class: 'vis-alerts'
+                class: 'visWrapper__alerts'
               },
               {
                 type: 'div',
-                class: 'x-axis-wrapper axis-wrapper-bottom',
+                class: 'visAxis--x visAxis__column--bottom',
                 children: [
                   {
                     type: 'div',
-                    class: 'x-axis-div-wrapper',
+                    class: 'visAxis__splitAxes--x',
                     splits: xAxisSplit
                   },
                   {
                     type: 'div',
-                    class: 'x-axis-chart-title',
+                    class: 'visAxis__splitTitles--x',
                     splits: chartTitleSplit
-                  },
-                  {
-                    type: 'div',
-                    class: 'x-axis-title axis-title'
                   }
                 ]
               }
@@ -124,30 +131,26 @@ export default function ColumnLayoutFactory(Private) {
           },
           {
             type: 'div',
-            class: 'y-axis-col-wrapper',
+            class: 'visAxis--y',
             children: [
               {
                 type: 'div',
-                class: 'y-axis-spacer-block y-axis-spacer-block-top'
+                class: 'visAxis__spacer--y visAxis__spacer--y-top'
               },
               {
                 type: 'div',
-                class: 'y-axis-col axis-wrapper-right',
+                class: 'visAxis__column--y visAxis__column--right',
                 children: [
                   {
                     type: 'div',
-                    class: 'y-axis-div-wrapper',
+                    class: 'visAxis__splitAxes--y',
                     splits: yAxisSplit
-                  },
-                  {
-                    type: 'div',
-                    class: 'y-axis-title axis-title'
                   }
                 ]
               },
               {
                 type: 'div',
-                class: 'y-axis-spacer-block y-axis-spacer-block-bottom'
+                class: 'visAxis__spacer--y visAxis__spacer--y-bottom'
               }
             ]
           }

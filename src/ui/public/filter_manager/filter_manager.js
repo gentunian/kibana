@@ -1,14 +1,33 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import _ from 'lodash';
-import FilterBarQueryFilterProvider from 'ui/filter_bar/query_filter';
-import { buildInlineScriptForPhraseFilter } from './lib/phrase';
+import { FilterBarQueryFilterProvider } from '../filter_bar/query_filter';
+import { getPhraseScript } from '@kbn/es-query';
 
 // Adds a filter to a passed state
-export default function (Private) {
+export function FilterManagerProvider(Private) {
   const queryFilter = Private(FilterBarQueryFilterProvider);
   const filterManager = {};
 
-  filterManager.add = function (field, values, operation, index) {
-    values = _.isArray(values) ? values : [values];
+  filterManager.generate = (field, values, operation, index) => {
+    values = Array.isArray(values) ? values : [values];
     const fieldName = _.isObject(field) ? field.name : field;
     const filters = _.flatten([queryFilter.getAppFilters()]);
     const newFilters = [];
@@ -45,10 +64,7 @@ export default function (Private) {
       switch (fieldName) {
         case '_exists_':
           filter = {
-            meta: {
-              negate: negate,
-              index: index
-            },
+            meta: { negate, index },
             exists: {
               field: value
             }
@@ -57,19 +73,11 @@ export default function (Private) {
         default:
           if (field.scripted) {
             filter = {
-              meta: { negate: negate, index: index, field: fieldName },
-              script: {
-                script: {
-                  inline: buildInlineScriptForPhraseFilter(field),
-                  lang: field.lang,
-                  params: {
-                    value: value
-                  }
-                }
-              }
+              meta: { negate, index, field: fieldName },
+              script: getPhraseScript(field, value)
             };
           } else {
-            filter = { meta: { negate: negate, index: index }, query: { match: {} } };
+            filter = { meta: { negate, index }, query: { match: {} } };
             filter.query.match[fieldName] = { query: value, type: 'phrase' };
           }
 
@@ -79,9 +87,13 @@ export default function (Private) {
       newFilters.push(filter);
     });
 
+    return newFilters;
+  };
+
+  filterManager.add = function (field, values, operation, index) {
+    const newFilters = this.generate(field, values, operation, index);
     return queryFilter.addFilters(newFilters);
   };
 
   return filterManager;
 }
-

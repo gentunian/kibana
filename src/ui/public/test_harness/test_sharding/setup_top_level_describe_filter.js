@@ -1,3 +1,22 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 /**
  *  Intercept all calls to mocha.describe() and determine
  *  which calls make it through using a filter function.
@@ -65,7 +84,6 @@ export function setupTopLevelDescribeFilter(test) {
    *  @type {Number}
    */
   let describeCallDepth = 0;
-  const ignoredCalls = [];
 
   const describeInterceptor = function (describeName, describeBody) {
     const context = this;
@@ -80,7 +98,7 @@ export function setupTopLevelDescribeFilter(test) {
      *  to date even if the call throws an error.
      *
      *  note that try/finally won't actually catch the error, it
-     *  will continue to propogate up the call stack
+     *  will continue to propagate up the call stack
      */
     let result;
     try {
@@ -94,6 +112,7 @@ export function setupTopLevelDescribeFilter(test) {
 
   // to allow describe.only calls. we dont need interceptor as it will call describe internally
   describeInterceptor.only = originalDescribe.only;
+  describeInterceptor.skip = originalDescribe.skip;
 
   // ensure that window.describe isn't messed with by other code
   Object.defineProperty(window, 'describe', {

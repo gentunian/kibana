@@ -1,14 +1,50 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import _ from 'lodash';
-import 'ui/filters/uriescape';
-import 'ui/filters/rison';
-import uiModules from 'ui/modules';
-import rison from 'rison-node';
-import AppStateProvider from 'ui/state_management/app_state';
+import '../filters/uriescape';
+import '../filters/rison';
+import { uiModules } from '../modules';
+import { AppStateProvider } from '../state_management/app_state';
 
 uiModules.get('kibana/url')
-.service('kbnUrl', function (Private) { return Private(KbnUrlProvider); });
+  .service('kbnUrl', function (Private) { return Private(KbnUrlProvider); });
 
-export function KbnUrlProvider($injector, $location, $rootScope, $parse, Private) {
+export function KbnUrlProvider($injector, $location, $rootScope, $parse, Private, i18n) {
+  /**
+   *  the `kbnUrl` service was created to smooth over some of the
+   *  inconsistent behavior that occurs when modifying the url via
+   *  the `$location` api. In general it is recommended that you use
+   *  the `kbnUrl` service any time you want to modify the url.
+   *
+   *  "features" that `kbnUrl` does it's best to guarantee, which
+   *  are not guaranteed with the `$location` service:
+   *   - calling `kbnUrl.change()` with a url that resolves to the current
+   *     route will force a full transition (rather than just updating the
+   *     properties of the $route object)
+   *
+   *  Additional features of `kbnUrl`
+   *   - parameterized urls
+   *   - easily include an app state with the url
+   *
+   *  @type {KbnUrl}
+   */
   const self = this;
 
   /**
@@ -78,7 +114,11 @@ export function KbnUrlProvider($injector, $location, $rootScope, $parse, Private
 
       // if evaluation can't be made, throw
       if (_.isUndefined(p)) {
-        throw new Error('Replacement failed, unresolved expression: ' + expr);
+        throw new Error(
+          i18n('common.ui.url.replacementFailedErrorMessage', {
+            defaultMessage: 'Replacement failed, unresolved expression: {expr}',
+            values: { expr }
+          }));
       }
 
       // append uriescape filter if not included

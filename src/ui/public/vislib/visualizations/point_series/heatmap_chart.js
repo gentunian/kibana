@@ -1,11 +1,31 @@
-import _ from 'lodash';
-import d3 from 'd3';
-import $ from 'jquery';
-import moment from 'moment';
-import VislibVisualizationsPointSeriesProvider from './_point_series';
-import getColor from 'ui/vislib/components/color/heatmap_color';
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
 
-export default function HeatmapChartFactory(Private) {
+import _ from 'lodash';
+import moment from 'moment';
+import { VislibVisualizationsPointSeriesProvider } from './_point_series';
+import { getHeatmapColors } from '../../components/color/heatmap_color';
+import {
+  isColorDark
+} from '@elastic/eui';
+
+export function VislibVisualizationsHeatmapChartProvider(Private) {
 
   const PointSeries = Private(VislibVisualizationsPointSeriesProvider);
 
@@ -44,16 +64,22 @@ export default function HeatmapChartFactory(Private) {
       const percentageMode = cfg.get('percentageMode');
       const colorsNumber = cfg.get('colorsNumber');
       const colorsRange = cfg.get('colorsRange');
+      const zAxisConfig = this.getValueAxis().axisConfig;
+      const zAxisFormatter = zAxisConfig.get('labels.axisFormatter');
       const zScale = this.getValueAxis().getScale();
       const [min, max] = zScale.domain();
       const labels = [];
+      const maxColorCnt = 10;
       if (cfg.get('setColorRange')) {
         colorsRange.forEach(range => {
-          const from = range.from;
-          const to = range.to;
+          const from = isFinite(range.from) ? zAxisFormatter(range.from) : range.from;
+          const to = isFinite(range.to) ? zAxisFormatter(range.to) : range.to;
           labels.push(`${from} - ${to}`);
         });
       } else {
+        if (max === min) {
+          return [ min.toString() ];
+        }
         for (let i = 0; i < colorsNumber; i++) {
           let label;
           let val = i / colorsNumber;
@@ -65,10 +91,18 @@ export default function HeatmapChartFactory(Private) {
           } else {
             val = val * (max - min) + min;
             nextVal = nextVal * (max - min) + min;
-            if (max > 1) {
-              val = Math.ceil(val);
+            if (max - min > maxColorCnt) {
+              const valInt = Math.ceil(val);
+              if (i === 0) {
+                val = (valInt === val ? val : valInt - 1);
+              }
+              else{
+                val = valInt;
+              }
               nextVal = Math.ceil(nextVal);
             }
+            if (isFinite(val)) val = zAxisFormatter(val);
+            if (isFinite(nextVal)) nextVal = zAxisFormatter(nextVal);
             label = `${val} - ${nextVal}`;
           }
 
@@ -80,15 +114,14 @@ export default function HeatmapChartFactory(Private) {
     }
 
     getHeatmapColors(cfg) {
-      const colorsNumber = cfg.get('colorsNumber');
       const invertColors = cfg.get('invertColors');
       const colorSchema = cfg.get('colorSchema');
       const labels = this.getHeatmapLabels(cfg);
       const colors = {};
       for (const i in labels) {
         if (labels[i]) {
-          const val = invertColors ? 1 - i / colorsNumber : i / colorsNumber;
-          colors[labels[i]] = getColor(val, colorSchema);
+          const val = invertColors ? 1 - i / labels.length : i / labels.length;
+          colors[labels[i]] = getHeatmapColors(val, colorSchema);
         }
       }
       return colors;
@@ -96,9 +129,8 @@ export default function HeatmapChartFactory(Private) {
 
     addSquares(svg, data) {
       const xScale = this.getCategoryAxis().getScale();
-      const yScale = this.handler.valueAxes[1].getScale();
+      const yScale = this.handler.categoryAxes[1].getScale();
       const zScale = this.getValueAxis().getScale();
-      const ordered = this.handler.data.get('ordered');
       const tooltip = this.baseChart.tooltip;
       const isTooltip = this.handler.visConfig.get('tooltip.show');
       const isHorizontal = this.getCategoryAxis().axisConfig.isHorizontal();
@@ -110,6 +142,7 @@ export default function HeatmapChartFactory(Private) {
       const zAxisConfig = this.getValueAxis().axisConfig;
       const zAxisFormatter = zAxisConfig.get('labels.axisFormatter');
       const showLabels = zAxisConfig.get('labels.show');
+      const overwriteLabelColor = zAxisConfig.get('labels.overwriteColor', false);
 
       const layer = svg.append('g')
         .attr('class', 'series');
@@ -151,17 +184,23 @@ export default function HeatmapChartFactory(Private) {
         } else {
           if (isNaN(min) || isNaN(max)) {
             val = colorsNumber - 1;
+          } else if (min === max) {
+            val = 0;
           } else {
             val = (d.y - min) / (max - min); /* get val from 0 - 1 */
             val = Math.min(colorsNumber - 1, Math.floor(val * colorsNumber));
           }
         }
-        return val;
+        if (d.y == null) {
+          return -1;
+        }
+        return !isNaN(val) ? val : -1;
       }
 
       function label(d) {
         const colorBucket = getColorBucket(d);
-        if (colorBucket === -1) d.hide = true;
+        // colorBucket id should always GTE 0
+        if (colorBucket < 0) d.hide = true;
         return labels[colorBucket];
       }
 
@@ -203,9 +242,23 @@ export default function HeatmapChartFactory(Private) {
           Math.abs(squareHeight / Math.sin(rotateRad))
         ) - cellPadding;
         const maxHeight = Math.min(
-            Math.abs(squareWidth / Math.sin(rotateRad)),
-            Math.abs(squareHeight / Math.cos(rotateRad))
+          Math.abs(squareWidth / Math.sin(rotateRad)),
+          Math.abs(squareHeight / Math.cos(rotateRad))
         ) - cellPadding;
+
+        let labelColor;
+        if (overwriteLabelColor) {
+          // If overwriteLabelColor is true, use the manual specified color
+          labelColor = zAxisConfig.get('labels.color');
+        } else {
+          // Otherwise provide a function that will calculate a light or dark color
+          labelColor = d => {
+            const bgColor = z(d);
+            const color = /rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/.exec(bgColor);
+            return color && isColorDark(parseInt(color[1]), parseInt(color[2]), parseInt(color[3]))
+              ? '#FFF' : '#222';
+          };
+        }
 
         let hiddenLabels = false;
         squares.append('text')
@@ -222,7 +275,7 @@ export default function HeatmapChartFactory(Private) {
           })
           .style('dominant-baseline', 'central')
           .style('text-anchor', 'middle')
-          .style('fill', zAxisConfig.get('labels.color'))
+          .style('fill', labelColor)
           .attr('x', function (d) {
             const center = x(d) + squareWidth / 2;
             return center;
@@ -237,7 +290,7 @@ export default function HeatmapChartFactory(Private) {
             return `rotate(${rotate},${horizontalCenter},${verticalCenter})`;
           });
         if (hiddenLabels) {
-          this.baseChart.handler.alerts.show('Some labels were hidden due to size constrains');
+          this.baseChart.handler.alerts.show('Some labels were hidden due to size constraints');
         }
       }
 

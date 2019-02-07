@@ -1,13 +1,10 @@
-# Kibana 6.0.0-alpha1
+# Kibana
 
-Kibana is your window into the [Elastic Stack](https://www.elastic.co/products). Specifically, it's
-an open source ([Apache Licensed](LICENSE.md)),
-browser-based analytics and search dashboard for Elasticsearch.
+Kibana is your window into the [Elastic Stack](https://www.elastic.co/products). Specifically, it's a browser-based analytics and search dashboard for Elasticsearch.
 
 - [Getting Started](#getting-started)
   - [Using a Kibana Release](#using-a-kibana-release)
   - [Building and Running Kibana, and/or Contributing Code](#building-and-running-kibana-andor-contributing-code)
-  - [Snapshot Builds](#snapshot-builds)
 - [Documentation](#documentation)
 - [Version Compatibility with Elasticsearch](#version-compatibility-with-elasticsearch)
 - [Questions? Problems? Suggestions?](#questions-problems-suggestions)
@@ -30,28 +27,20 @@ If you want to use a Kibana release in production, give it a test run, or just p
 
 ### Building and Running Kibana, and/or Contributing Code
 
-You may want to build Kibana locally to contribute some code, test out the latest features, or try
+You might want to build Kibana locally to contribute some code, test out the latest features, or try
 out an open PR:
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) will help you get Kibana up and running.
 - If you would like to contribute code, please follow our [STYLEGUIDE.md](STYLEGUIDE.md).
+- Learn more about our UI code with [UI_SYSTEMS.md](src/ui/public/UI_SYSTEMS.md).
 - For all other questions, check out the [FAQ.md](FAQ.md) and
 [wiki](https://github.com/elastic/kibana/wiki).
-
-### Snapshot Builds
-
-For the daring, snapshot builds are available. These builds are created after each commit to the master branch, and therefore are not something you should run in production.
-
-| platform |  |
-| --- | --- |
-| OSX | [tar](http://download.elastic.co/kibana/kibana-snapshot/kibana-6.0.0-alpha1-SNAPSHOT-darwin-x86_64.tar.gz) |
-| Linux x64 | [tar](http://download.elastic.co/kibana/kibana-snapshot/kibana-6.0.0-alpha1-SNAPSHOT-linux-x86_64.tar.gz) [deb](https://download.elastic.co/kibana/kibana-snapshot/kibana-6.0.0-alpha1-SNAPSHOT-amd64.deb) [rpm](https://download.elastic.co/kibana/kibana-snapshot/kibana-6.0.0-alpha1-SNAPSHOT-x86_64.rpm) |
-| Linux x86 | [tar](http://download.elastic.co/kibana/kibana-snapshot/kibana-6.0.0-alpha1-SNAPSHOT-linux-x86.tar.gz) [deb](https://download.elastic.co/kibana/kibana-snapshot/kibana-6.0.0-alpha1-SNAPSHOT-i386.deb) [rpm](https://download.elastic.co/kibana/kibana-snapshot/kibana-6.0.0-alpha1-SNAPSHOT-i686.rpm) |
-| Windows | [zip](http://download.elastic.co/kibana/kibana-snapshot/kibana-6.0.0-alpha1-SNAPSHOT-windows-x86.zip) |
 
 ## Documentation
 
 Visit [Elastic.co](http://www.elastic.co/guide/en/kibana/current/index.html) for the full Kibana documentation.
+
+For information about building the documentation, see the README in [elastic/docs](https://github.com/elastic/docs).
 
 ## Version Compatibility with Elasticsearch
 

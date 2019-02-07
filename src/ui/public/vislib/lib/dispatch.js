@@ -1,9 +1,28 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import d3 from 'd3';
 import _ from 'lodash';
 import $ from 'jquery';
-import SimpleEmitter from 'ui/utils/simple_emitter';
+import { SimpleEmitter } from '../../utils/simple_emitter';
 
-export default function DispatchClass(Private, config) {
+export function VislibLibDispatchProvider(Private, config) {
 
   /**
    * Handles event responses
@@ -20,8 +39,57 @@ export default function DispatchClass(Private, config) {
       this._listeners = {};
     }
 
+
+    _pieClickResponse(data) {
+      const points = [];
+
+      let dataPointer = data;
+      while (dataPointer && dataPointer.rawData) {
+        points.push(dataPointer.rawData);
+        dataPointer = dataPointer.parent;
+      }
+
+      if (data.rawData.table.$parent) {
+        const { table, column, row, key } = data.rawData.table.$parent;
+        points.push({ table, column, row, value: key });
+      }
+
+      return points;
+    }
+
+    _seriesClickResponse(data) {
+      const points = [];
+
+      ['xRaw', 'yRaw', 'zRaw', 'seriesRaw', 'rawData', 'tableRaw'].forEach(val => {
+        if (data[val]) {
+          points.push(data[val]);
+        }
+      });
+
+      return points;
+    }
+
     /**
-     * Response to click and hover events
+     * Response to click  events
+     *
+     * @param d {Object} Data point
+     * @returns event with list of data points related to the click
+     */
+    clickEventResponse(d) {
+      const _data = d3.event.target.nearestViewportElement ?
+        d3.event.target.nearestViewportElement.__data__ : d3.event.target.__data__;
+      const isSlices = !!(_data && _data.slices);
+
+      const data = d.input || d;
+
+      return {
+        e: d3.event,
+        data: isSlices ? this._pieClickResponse(data) : this._seriesClickResponse(data),
+      };
+    }
+
+    /**
+     * Response to hover events
      *
      * @param d {Object} Data point
      * @param i {Number} Index number of data point
@@ -40,7 +108,6 @@ export default function DispatchClass(Private, config) {
       const slices = isSlices ? data.slices : undefined;
       const handler = this.handler;
       const color = _.get(handler, 'data.color');
-      const isPercentage = (handler && handler.visConfig.get('mode', 'normal') === 'percentage');
 
       const eventData = {
         value: d.y,
@@ -56,19 +123,6 @@ export default function DispatchClass(Private, config) {
         e: d3.event,
         handler: handler
       };
-
-      if (isSeries) {
-        // Find object with the actual d value and add it to the point object
-        const object = _.find(series, { 'label': label });
-        if (object) {
-          eventData.value = +object.values[i].y;
-
-          if (isPercentage) {
-            // Add the formatted percentage to the point object
-            eventData.percent = (100 * d.y).toFixed(1) + '%';
-          }
-        }
-      }
 
       return eventData;
     }
@@ -149,8 +203,8 @@ export default function DispatchClass(Private, config) {
       const self = this;
       const addEvent = this.addEvent;
 
-      function click(d, i) {
-        self.emit('click', self.eventResponse(d, i));
+      function click(d) {
+        self.emit('click', self.clickEventResponse(d));
       }
 
       return addEvent('click', click);

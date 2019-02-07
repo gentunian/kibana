@@ -1,15 +1,38 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import { assign } from 'lodash';
-import IndexedArray from 'ui/indexed_array';
+import { IndexedArray } from '../indexed_array';
 
-export default class ManagementSection {
+const listeners = [];
 
+export class ManagementSection {
   /**
    * @param {string} id
    * @param {object} options
    * @param {number|null} options.order
    * @param {string|null} options.display - defaults to id
-   * @param {string|null} options.url
-   * @param {string|null} options.info
+   * @param {string|null} options.url - defaults to ''
+   * @param {boolean|null} options.visible - defaults to true
+   * @param {boolean|null} options.disabled - defaults to false
+   * @param {string|null} options.tooltip - defaults to ''
+   * @param {string|null} options.icon - defaults to ''
    * @returns {ManagementSection}
    */
 
@@ -20,8 +43,27 @@ export default class ManagementSection {
       index: ['id'],
       order: ['order']
     });
+    this.visible = true;
+    this.disabled = false;
+    this.tooltip = '';
+    this.icon = '';
+    this.url = '';
 
     assign(this, options);
+  }
+
+  get visibleItems() {
+    return this.items.inOrder.filter(item => item.visible);
+  }
+
+  /**
+   * Registers a callback that will be executed when management sections are updated
+   * Globally bound to solve for sidebar nav needs
+   *
+   * @param {function} fn
+   */
+  addListener(fn) {
+    listeners.push(fn);
   }
 
   /**
@@ -40,6 +82,7 @@ export default class ManagementSection {
     }
 
     this.items.push(item);
+    listeners.forEach(fn => fn());
 
     return item;
   }
@@ -51,6 +94,7 @@ export default class ManagementSection {
   */
   deregister(id) {
     this.items.remove(item => item.id === id);
+    listeners.forEach(fn => fn(this.items));
   }
 
   /**
@@ -72,6 +116,33 @@ export default class ManagementSection {
    */
 
   getSection(id) {
-    return this.items.byId[id];
+    if (!id) {
+      return;
+    }
+
+    const sectionPath = id.split('/');
+    return sectionPath.reduce((currentSection, nextSection) => {
+      if (!currentSection) {
+        return;
+      }
+
+      return currentSection.items.byId[nextSection];
+    }, this);
+  }
+
+  hide() {
+    this.visible = false;
+  }
+
+  show() {
+    this.visible = true;
+  }
+
+  disable() {
+    this.disabled = true;
+  }
+
+  enable() {
+    this.disabled = false;
   }
 }

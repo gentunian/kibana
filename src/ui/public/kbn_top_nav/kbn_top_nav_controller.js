@@ -1,10 +1,28 @@
-import { capitalize, isArray, isFunction } from 'lodash';
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
 
-import chrome from 'ui/chrome';
-import filterTemplate from 'ui/chrome/config/filter.html';
-import intervalTemplate from 'ui/chrome/config/interval.html';
+import { capitalize, isArray, isFunction, get } from 'lodash';
 
-export default function ($compile) {
+import chrome from '../chrome';
+import { i18n } from '@kbn/i18n';
+
+export function KbnTopNavControllerProvider($compile) {
   return class KbnTopNavController {
     constructor(opts = []) {
       if (opts instanceof KbnTopNavController) {
@@ -14,10 +32,8 @@ export default function ($compile) {
       this.opts = [];
       this.menuItems = [];
       this.currentKey = null;
-      this.templates = {
-        interval: intervalTemplate,
-        filter: filterTemplate,
-      };
+      this.templates = {};
+      this.locals = new Map();
 
       this.addItems(opts);
     }
@@ -35,39 +51,50 @@ export default function ($compile) {
         this.opts.push(opt);
         if (!opt.hideButton()) this.menuItems.push(opt);
         if (opt.template) this.templates[opt.key] = opt.template;
+        if (opt.locals) {
+          this.locals.set(opt.key, opt.locals);
+        }
       });
     }
 
     // change the current key and rerender
-    setCurrent(key) {
+    setCurrent = (key) => {
       if (key && !this.templates.hasOwnProperty(key)) {
         throw new TypeError(`KbnTopNav: unknown template key "${key}"`);
       }
 
       this.currentKey = key || null;
       this._render();
-    }
+    };
 
     // little usability helpers
-    getCurrent() { return this.currentKey; }
-    isCurrent(key) { return this.getCurrent() === key; }
-    open(key) { this.setCurrent(key); }
-    close(key) { (!key || this.isCurrent(key)) && this.setCurrent(null); }
-    toggle(key) { this.setCurrent(this.isCurrent(key) ? null : key); }
-    handleClick(menuItem) {
+    getCurrent = () => { return this.currentKey; };
+    isCurrent = (key) => { return this.getCurrent() === key; };
+    open = (key) => { this.setCurrent(key); };
+    close = (key) => { (!key || this.isCurrent(key)) && this.setCurrent(null); };
+    toggle = (key) => { this.setCurrent(this.isCurrent(key) ? null : key); };
+    click = (key) => { this.handleClick(this.getItem(key)); };
+    getItem = (key) => { return this.menuItems.find(i => i.key === key); };
+    handleClick = (menuItem, event) => {
       if (menuItem.disableButton()) {
         return false;
       }
-      menuItem.run(menuItem, this);
-    }
+      // event will be undefined when method is called from click
+      menuItem.run(menuItem, this, get(event, 'target'));
+    };
     // apply the defaults to individual options
     _applyOptDefault(opt = {}) {
-      const defaultedOpt = Object.assign({
-        label: capitalize(opt.key),
+      const optLabel = opt.label ? opt.label : capitalize(opt.key);
+      const defaultedOpt = {
+        label: optLabel,
         hasFunction: !!opt.run,
-        description: opt.run ? opt.key : `Toggle ${opt.key} view`,
-        run: (item) => this.toggle(item.key)
-      }, opt);
+        description: opt.run ? optLabel : i18n.translate('common.ui.topNav.toggleViewAriaLabel', {
+          defaultMessage: 'Toggle {optLabel} view',
+          values: { optLabel }
+        }),
+        run: (item) => this.toggle(item.key),
+        ...opt
+      };
 
       defaultedOpt.hideButton = isFunction(opt.hideButton) ? opt.hideButton : () => !!opt.hideButton;
       defaultedOpt.disableButton = isFunction(opt.disableButton) ? opt.disableButton : () => !!opt.disableButton;
@@ -107,6 +134,9 @@ export default function ($compile) {
       }
 
       const $childScope = $scope.$new();
+      if (this.locals.has(currentKey)) {
+        Object.assign($childScope, this.locals.get(currentKey));
+      }
       const $el = $element.find('#template_wrapper').html(templateToRender).contents();
       $compile($el)($childScope);
 

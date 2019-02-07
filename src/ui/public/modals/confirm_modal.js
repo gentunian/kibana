@@ -1,9 +1,39 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+import angular from 'angular';
 import { noop } from 'lodash';
-import uiModules from 'ui/modules';
+import { uiModules } from '../modules';
 import template from './confirm_modal.html';
 import { ModalOverlay } from './modal_overlay';
 
 const module = uiModules.get('kibana');
+
+import {
+  EUI_MODAL_CONFIRM_BUTTON as CONFIRM_BUTTON,
+  EUI_MODAL_CANCEL_BUTTON as CANCEL_BUTTON,
+} from '@elastic/eui';
+
+export const ConfirmationButtonTypes = {
+  CONFIRM: CONFIRM_BUTTON,
+  CANCEL: CANCEL_BUTTON
+};
 
 /**
  * @typedef {Object} ConfirmModalOptions
@@ -11,15 +41,12 @@ const module = uiModules.get('kibana');
  * @property {String=} cancelButtonText
  * @property {function} onConfirm
  * @property {function=} onCancel
- * @property {String=} title - If given, shows a title on the confirm modal. A title must be given if
- * showClose is true, for aesthetic reasons.
- * @property {Boolean=} showClose - If true, shows an [x] icon close button which by default is a noop
- * @property {function=} onClose - Custom close button to call if showClose is true. If not supplied
- * but showClose is true, the function defaults to onCancel.
+ * @property {String=} title - If given, shows a title on the confirm modal.
  */
 
-module.factory('confirmModal', function ($rootScope, $compile) {
+module.factory('confirmModal', function ($rootScope, $compile, i18n) {
   let modalPopover;
+  const confirmQueue = [];
 
   /**
    * @param {String} message - the message to show in the body of the confirmation dialog.
@@ -28,13 +55,11 @@ module.factory('confirmModal', function ($rootScope, $compile) {
   return function confirmModal(message, customOptions) {
     const defaultOptions = {
       onCancel: noop,
-      cancelButtonText: 'Cancel',
-      showClose: false
+      cancelButtonText: i18n('common.ui.modals.cancelButtonLabel', {
+        defaultMessage: 'Cancel'
+      }),
+      defaultFocusedButton: ConfirmationButtonTypes.CONFIRM
     };
-
-    if (customOptions.showClose === true && !customOptions.title) {
-      throw new Error('A title must be supplied when a close icon is shown');
-    }
 
     if (!customOptions.confirmButtonText || !customOptions.onConfirm) {
       throw new Error('Please specify confirmation button text and onConfirm action');
@@ -46,18 +71,13 @@ module.factory('confirmModal', function ($rootScope, $compile) {
     // onCancel callback.
     options.onClose = customOptions.onClose || options.onCancel;
 
-    if (modalPopover) {
-      throw new Error('You\'ve called confirmModal but there\'s already a modal open. ' +
-        'You can only have one modal open at a time.');
-    }
-
     const confirmScope = $rootScope.$new();
 
     confirmScope.message = message;
+    confirmScope.defaultFocusedButton = options.defaultFocusedButton;
     confirmScope.confirmButtonText = options.confirmButtonText;
     confirmScope.cancelButtonText = options.cancelButtonText;
     confirmScope.title = options.title;
-    confirmScope.showClose = options.showClose;
     confirmScope.onConfirm = () => {
       destroy();
       options.onConfirm();
@@ -71,14 +91,26 @@ module.factory('confirmModal', function ($rootScope, $compile) {
       options.onClose();
     };
 
-    const modalInstance = $compile(template)(confirmScope);
-    modalPopover = new ModalOverlay(modalInstance);
-    modalInstance.find('[data-test-subj=confirmModalConfirmButton]').focus();
+    function showModal(confirmScope) {
+      const modalInstance = $compile(template)(confirmScope);
+      modalPopover = new ModalOverlay(modalInstance);
+    }
+
+    if (modalPopover) {
+      confirmQueue.unshift(confirmScope);
+    } else {
+      showModal(confirmScope);
+    }
 
     function destroy() {
       modalPopover.destroy();
       modalPopover = undefined;
+      angular.element(document.body).off('keydown');
       confirmScope.$destroy();
+
+      if (confirmQueue.length > 0) {
+        showModal(confirmQueue.pop());
+      }
     }
   };
 });

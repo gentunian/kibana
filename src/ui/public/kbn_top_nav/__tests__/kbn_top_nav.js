@@ -1,12 +1,29 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import ngMock from 'ng_mock';
 import expect from 'expect.js';
 import { assign, pluck } from 'lodash';
 import $ from 'jquery';
 
 import '../kbn_top_nav';
-import KbnTopNavControllerProvider from '../kbn_top_nav_controller';
-import navbarExtensionsRegistry from 'ui/registry/navbar_extensions';
-import Registry from 'ui/registry/_registry';
+import { KbnTopNavControllerProvider } from '../kbn_top_nav_controller';
 
 describe('kbnTopNav directive', function () {
   let build;
@@ -54,5 +71,18 @@ describe('kbnTopNav directive', function () {
     const controller = new KbnTopNavController();
     const { $scope } = build({ controller }, { config: 'controller' });
     expect($scope.kbnTopNav).to.be(controller);
+  });
+
+  it('should allow setting CSS classes via className', () => {
+    const scope = {
+      config: [
+        { key: 'foo', testId: 'foo', className: 'fooClass' },
+        { key: 'test', testId: 'test', className: 'class1 class2' },
+      ],
+    };
+    const { $el } = build(scope, { config: 'config' });
+    expect($el.find('[data-test-subj="foo"]').hasClass('fooClass')).to.be(true);
+    expect($el.find('[data-test-subj="test"]').hasClass('class1')).to.be(true);
+    expect($el.find('[data-test-subj="test"]').hasClass('class2')).to.be(true);
   });
 });

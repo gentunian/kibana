@@ -1,10 +1,18 @@
-<table class="vis-editor-agg-editor-ranges form-group" ng-show="agg.params.ranges.length">
+<table class="visEditorAgg__rangesTable form-group" ng-show="agg.params.ranges.length">
   <tr>
-    <th>
-      <label>From</label>
+    <th scope="col">
+      <label
+        id="visEditorRangeFrom{{agg.id}}"
+        i18n-id="common.ui.aggTypes.ranges.fromColumnLabel"
+        i18n-default-message="From"
+      ></label>
     </th>
-    <th colspan="2">
-      <label>To</label>
+    <th scope="col" colspan="2">
+      <label
+        id="visEditorRangeTo{{agg.id}}"
+        i18n-id="common.ui.aggTypes.ranges.toColumnLabel"
+        i18n-default-message="To"
+      ></label>
     </th>
   </tr>
 
@@ -12,6 +20,7 @@
     ng-repeat="range in agg.params.ranges track by $index">
     <td>
       <input
+        aria-labelledby="visEditorRangeFrom{{agg.id}}"
         ng-model="range.from"
         type="number"
         class="form-control"
@@ -20,6 +29,7 @@
     </td>
     <td>
       <input
+        aria-labelledby="visEditorRangeTo{{agg.id}}"
         ng-model="range.to"
         type="number"
         class="form-control"
@@ -29,8 +39,9 @@
     <td>
       <button
         type="button"
+        aria-label="{{ ::'common.ui.aggTypes.ranges.removeRangeButtonAriaLabel' | i18n: { defaultMessage: 'Remove this range' } }}"
         ng-click="agg.params.ranges.splice($index, 1)"
-        class="btn btn-danger btn-xs">
+        class="kuiButton kuiButton--danger kuiButton--small">
         <i class="fa fa-times"></i>
       </button>
     </td>
@@ -41,12 +52,20 @@
 <div class="hintbox" ng-show="aggForm.rangeLength.$invalid">
   <p>
     <i class="fa fa-danger text-danger"></i>
-    <strong>Required:</strong> You must specify at least one range.
+    <strong
+      i18n-id="common.ui.aggTypes.ranges.requiredRangeTitle"
+      i18n-default-message="Required:"
+    ></strong>
+    <span
+      i18n-id="common.ui.aggTypes.ranges.requiredRangeDescription"
+      i18n-default-message="You must specify at least one range."
+    ></span>
   </p>
 </div>
 
-<div
+<button
   ng-click="agg.params.ranges.push({})"
-  class="sidebar-item-button primary">
-  Add Range
-</div>
+  class="kuiButton kuiButton--primary kuiButton--fullWidth"
+  i18n-id="common.ui.aggTypes.ranges.addRangeButtonLabel"
+  i18n-default-message="Add Range"
+></button>

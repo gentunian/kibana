@@ -1,22 +1,24 @@
 [[tutorial-load-dataset]]
-== Loading Sample Data
+=== Loading sample data
 
-The tutorials in this section rely on the following data sets:
+This tutorial requires three data sets:
 
-* The complete works of William Shakespeare, suitably parsed into fields. Download this data set by clicking here:
-  https://download.elastic.co/demos/kibana/gettingstarted/shakespeare.json[shakespeare.json].
-* A set of fictitious accounts with randomly generated data. Download this data set by clicking here:
-  https://download.elastic.co/demos/kibana/gettingstarted/accounts.zip[accounts.zip]
-* A set of randomly generated log files. Download this data set by clicking here:
-  https://download.elastic.co/demos/kibana/gettingstarted/logs.jsonl.gz[logs.jsonl.gz]
+* The complete works of William Shakespeare, suitably parsed into fields. Download
+  https://download.elastic.co/demos/kibana/gettingstarted/shakespeare_6.0.json[`shakespeare.json`].
+* A set of fictitious accounts with randomly generated data. Download
+  https://download.elastic.co/demos/kibana/gettingstarted/accounts.zip[`accounts.zip`].
+* A set of randomly generated log files. Download
+  https://download.elastic.co/demos/kibana/gettingstarted/logs.jsonl.gz[`logs.jsonl.gz`].
 
-Two of the data sets are compressed. Use the following commands to extract the files:
+Two of the data sets are compressed. To extract the files, use these commands:
 
 [source,shell]
 unzip accounts.zip
 gunzip logs.jsonl.gz
 
-The Shakespeare data set is organized in the following schema:
+==== Structure of the data sets
+
+The Shakespeare data set has this structure:
 
 [source,json]
 {
@@ -28,7 +30,7 @@ The Shakespeare data set is organized in the following schema:
     "text_entry": "String",
 }
 
-The accounts data set is organized in the following schema:
+The accounts data set is structured as follows:
 
 [source,json]
 {
@@ -45,7 +47,7 @@ The accounts data set is organized in the following schema:
     "state": "String"
 }
 
-The schema for the logs data set has dozens of different fields, but the notable ones used in this tutorial are:
+The logs data set has dozens of different fields. Here are the notable fields for this tutorial:
 
 [source,json]
 {
@@ -54,42 +56,48 @@ The schema for the logs data set has dozens of different fields, but the notable
     "@timestamp": "date"
 }
 
-Before we load the Shakespeare and logs data sets, we need to set up {es-ref}mapping.html[_mappings_] for the fields.
-Mapping divides the documents in the index into logical groups and specifies a field's characteristics, such as the
-field's searchability or whether or not it's _tokenized_, or broken up into separate words.
+==== Set up mappings
 
-Use the following command to set up a mapping for the Shakespeare data set:
+Before you load the Shakespeare and logs data sets, you must set up {ref}/mapping.html[_mappings_] for the fields.
+Mappings divide the documents in the index into logical groups and specify the characteristics
+of the fields. These characteristics include the searchability of the field
+and whether it's _tokenized_, or broken up into separate words.
 
-[source,shell]
-curl -XPUT http://localhost:9200/shakespeare -d '
+NOTE: If security is enabled, you must have the `all` Kibana privilege to run this tutorial.
+You must also have the `create`, `manage` `read`, `write,` and `delete` 
+index privileges. See {xpack-ref}/security-privileges.html[Security Privileges] 
+for more information.
+
+In Kibana *Dev Tools > Console*, set up a mapping for the Shakespeare data set:
+
+[source,js]
+PUT /shakespeare
 {
- "mappings" : {
-  "_default_" : {
-   "properties" : {
-    "speaker" : {"type": "string", "index" : "not_analyzed" },
-    "play_name" : {"type": "string", "index" : "not_analyzed" },
-    "line_id" : { "type" : "integer" },
-    "speech_number" : { "type" : "integer" }
+ "mappings": {
+  "doc": {
+   "properties": {
+    "speaker": {"type": "keyword"},
+    "play_name": {"type": "keyword"},
+    "line_id": {"type": "integer"},
+    "speech_number": {"type": "integer"}
    }
   }
  }
 }
-';
 
-This mapping specifies the following qualities for the data set:
+//CONSOLE
 
-* The _speaker_ field is a string that isn't analyzed. The string in this field is treated as a single unit, even if
-there are multiple words in the field.
-* The same applies to the _play_name_ field.
-* The _line_id_ and _speech_number_ fields are integers.
+This mapping specifies field characteristics for the data set:
 
-The logs data set requires a mapping to label the latitude/longitude pairs in the logs as geographic locations by
-applying the `geo_point` type to those fields.
+* The `speaker` and `play_name` fields are keyword fields. These fields are not analyzed.
+The strings are treated as a single unit even if they contain multiple words.
+* The `line_id` and `speech_number` fields are integers.
 
-Use the following commands to establish `geo_point` mapping for the logs:
+The logs data set requires a mapping to label the latitude and longitude pairs
+as geographic locations by applying the `geo_point` type.
 
-[source,shell]
-curl -XPUT http://localhost:9200/logstash-2015.05.18 -d '
+[source,js]
+PUT /logstash-2015.05.18
 {
   "mappings": {
     "log": {
@@ -105,10 +113,11 @@ curl -XPUT http://localhost:9200/logstash-2015.05.18 -d '
     }
   }
 }
-';
 
-[source,shell]
-curl -XPUT http://localhost:9200/logstash-2015.05.19 -d '
+//CONSOLE
+
+[source,js]
+PUT /logstash-2015.05.19
 {
   "mappings": {
     "log": {
@@ -124,10 +133,11 @@ curl -XPUT http://localhost:9200/logstash-2015.05.19 -d '
     }
   }
 }
-';
 
-[source,shell]
-curl -XPUT http://localhost:9200/logstash-2015.05.20 -d '
+//CONSOLE
+
+[source,js]
+PUT /logstash-2015.05.20
 {
   "mappings": {
     "log": {
@@ -143,24 +153,37 @@ curl -XPUT http://localhost:9200/logstash-2015.05.20 -d '
     }
   }
 }
-';
 
-The accounts data set doesn't require any mappings, so at this point we're ready to use the Elasticsearch
-{es-ref}docs-bulk.html[`bulk`] API to load the data sets with the following commands:
+//CONSOLE
 
-[source,shell]
-curl -XPOST 'localhost:9200/bank/account/_bulk?pretty' --data-binary @accounts.json
-curl -XPOST 'localhost:9200/shakespeare/_bulk?pretty' --data-binary @shakespeare.json
-curl -XPOST 'localhost:9200/_bulk?pretty' --data-binary @logs.jsonl
+The accounts data set doesn't require any mappings.
 
-These commands may take some time to execute, depending on the computing resources available.
+==== Load the data sets
 
-Verify successful loading with the following command:
+At this point, you're ready to use the Elasticsearch {ref}/docs-bulk.html[bulk]
+API to load the data sets:
 
 [source,shell]
-curl 'localhost:9200/_cat/indices?v'
+curl -H 'Content-Type: application/x-ndjson' -XPOST 'localhost:9200/bank/account/_bulk?pretty' --data-binary @accounts.json
+curl -H 'Content-Type: application/x-ndjson' -XPOST 'localhost:9200/shakespeare/doc/_bulk?pretty' --data-binary @shakespeare_6.0.json
+curl -H 'Content-Type: application/x-ndjson' -XPOST 'localhost:9200/_bulk?pretty' --data-binary @logs.jsonl
 
-You should see output similar to the following:
+Or for Windows users, in Powershell:
+[source,shell]
+Invoke-RestMethod "http://localhost:9200/bank/account/_bulk?pretty" -Method Post -ContentType 'application/x-ndjson' -InFile "accounts.json"
+Invoke-RestMethod "http://localhost:9200/shakespeare/doc/_bulk?pretty" -Method Post -ContentType 'application/x-ndjson' -InFile "shakespeare_6.0.json"
+Invoke-RestMethod "http://localhost:9200/_bulk?pretty" -Method Post -ContentType 'application/x-ndjson' -InFile "logs.jsonl"
+
+These commands might take some time to execute, depending on the available computing resources.
+
+Verify successful loading:
+
+[source,js]
+GET /_cat/indices?v
+
+//CONSOLE
+
+Your output should look similar to this:
 
 [source,shell]
 health status index               pri rep docs.count docs.deleted store.size pri.store.size

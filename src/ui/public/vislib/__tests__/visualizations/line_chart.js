@@ -1,5 +1,23 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import d3 from 'd3';
-import angular from 'angular';
 import expect from 'expect.js';
 import ngMock from 'ng_mock';
 import _ from 'lodash';
@@ -13,7 +31,7 @@ import rangeRows from 'fixtures/vislib/mock_data/range/_rows';
 import termSeries from 'fixtures/vislib/mock_data/terms/_series';
 import $ from 'jquery';
 import FixturesVislibVisFixtureProvider from 'fixtures/vislib/_vis_fixture';
-import 'ui/persisted_state';
+import '../../../persisted_state';
 
 const dataTypes = [
   ['series pos', seriesPos],
@@ -25,7 +43,7 @@ const dataTypes = [
 ];
 
 describe('Vislib Line Chart', function () {
-  dataTypes.forEach(function (type, i) {
+  dataTypes.forEach(function (type) {
     const name = type[0];
     const data = type[1];
 
@@ -146,21 +164,6 @@ describe('Vislib Line Chart', function () {
             if (yAxis.yMin < 0 && yAxis.yMax > 0) {
               expect($(chart.chartEl).find('line.zero-line').length).to.be(1);
             }
-          });
-        });
-      });
-
-      describe('containerTooSmall error', function () {
-        beforeEach(function () {
-          $(vis.el).height(0);
-          $(vis.el).width(0);
-        });
-
-        it('should throw an error', function () {
-          vis.handler.charts.forEach(function (chart) {
-            expect(function () {
-              chart.render();
-            }).to.throwError();
           });
         });
       });

@@ -1,12 +1,30 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import d3 from 'd3';
-import angular from 'angular';
 import ngMock from 'ng_mock';
 import expect from 'expect.js';
 import $ from 'jquery';
-import VislibLibLayoutSplitsColumnChartChartSplitProvider from 'ui/vislib/lib/layout/splits/column_chart/chart_split';
-import VislibLibLayoutSplitsColumnChartChartTitleSplitProvider from 'ui/vislib/lib/layout/splits/column_chart/chart_title_split';
-import VislibLibLayoutSplitsColumnChartXAxisSplitProvider from 'ui/vislib/lib/layout/splits/column_chart/x_axis_split';
-import VislibLibLayoutSplitsColumnChartYAxisSplitProvider from 'ui/vislib/lib/layout/splits/column_chart/y_axis_split';
+import { VislibLibLayoutSplitsColumnChartChartSplitProvider } from '../../../../../lib/layout/splits/column_chart/chart_split';
+import { VislibLibLayoutSplitsColumnChartChartTitleSplitProvider } from '../../../../../lib/layout/splits/column_chart/chart_title_split';
+import { VislibLibLayoutSplitsColumnChartXAxisSplitProvider } from '../../../../../lib/layout/splits/column_chart/x_axis_split';
+import { VislibLibLayoutSplitsColumnChartYAxisSplitProvider } from '../../../../../lib/layout/splits/column_chart/y_axis_split';
 
 describe('Vislib Split Function Test Suite', function () {
   describe('Column Chart', function () {
@@ -18,15 +36,15 @@ describe('Vislib Split Function Test Suite', function () {
     const data = {
       rows: [
         {
-          hits      : 621,
-          label     : '',
-          ordered   : {
-            date    : true,
+          hits: 621,
+          label: '',
+          ordered: {
+            date: true,
             interval: 30000,
-            max     : 1408734982458,
-            min     : 1408734082458
+            max: 1408734982458,
+            min: 1408734082458
           },
-          series    : [
+          series: [
             {
               values: [
                 {
@@ -76,15 +94,15 @@ describe('Vislib Split Function Test Suite', function () {
           yAxisLabel: 'Count'
         },
         {
-          hits      : 621,
-          label     : '',
-          ordered   : {
-            date    : true,
+          hits: 621,
+          label: '',
+          ordered: {
+            date: true,
             interval: 30000,
-            max     : 1408734982458,
-            min     : 1408734082458
+            max: 1408734982458,
+            min: 1408734082458
           },
-          series    : [
+          series: [
             {
               values: [
                 {
@@ -168,7 +186,7 @@ describe('Vislib Split Function Test Suite', function () {
       });
 
       it('should add the correct class name', function () {
-        expect(!!$('.chart-wrapper-row').length).to.be(true);
+        expect(!!$('.visWrapper__splitCharts--row').length).to.be(true);
       });
     });
 
@@ -178,20 +196,20 @@ describe('Vislib Split Function Test Suite', function () {
       let fixture;
 
       beforeEach(ngMock.inject(function () {
-        visEl = el.append('div').attr('class', 'vis-wrapper');
-        visEl.append('div').attr('class', 'x-axis-chart-title');
-        visEl.append('div').attr('class', 'y-axis-chart-title');
-        visEl.select('.x-axis-chart-title').call(chartTitleSplit);
-        visEl.select('.y-axis-chart-title').call(chartTitleSplit);
+        visEl = el.append('div').attr('class', 'visWrapper');
+        visEl.append('div').attr('class', 'visAxis__splitTitles--x');
+        visEl.append('div').attr('class', 'visAxis__splitTitles--y');
+        visEl.select('.visAxis__splitTitles--x').call(chartTitleSplit);
+        visEl.select('.visAxis__splitTitles--y').call(chartTitleSplit);
 
         newEl = d3.select('body').append('div')
-          .attr('class', 'vis-wrapper')
+          .attr('class', 'visWrapper')
           .datum({ series: [] });
 
-        newEl.append('div').attr('class', 'x-axis-chart-title');
-        newEl.append('div').attr('class', 'y-axis-chart-title');
-        newEl.select('.x-axis-chart-title').call(chartTitleSplit);
-        newEl.select('.y-axis-chart-title').call(chartTitleSplit);
+        newEl.append('div').attr('class', 'visAxis__splitTitles--x');
+        newEl.append('div').attr('class', 'visAxis__splitTitles--y');
+        newEl.select('.visAxis__splitTitles--x').call(chartTitleSplit);
+        newEl.select('.visAxis__splitTitles--y').call(chartTitleSplit);
 
         fixture = newEl.selectAll(this.childNodes)[0].length;
       }));
@@ -205,8 +223,8 @@ describe('Vislib Split Function Test Suite', function () {
       });
 
       it('should remove the correct div', function () {
-        expect($('.y-axis-chart-title').length).to.be(1);
-        expect($('.x-axis-chart-title').length).to.be(0);
+        expect($('.visAxis__splitTitles--y').length).to.be(1);
+        expect($('.visAxis__splitTitles--x').length).to.be(0);
       });
 
       it('should remove all chart title divs when only one chart is rendered', function () {

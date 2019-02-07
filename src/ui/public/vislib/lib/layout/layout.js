@@ -1,12 +1,34 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import d3 from 'd3';
 import _ from 'lodash';
 import $ from 'jquery';
-import VislibLibLayoutLayoutTypesProvider from './layout_types';
-import AxisProvider from 'ui/vislib/lib/axis';
-export default function LayoutFactory(Private) {
+import { VislibLibLayoutLayoutTypesProvider } from './layout_types';
+import { VislibLibAxisProvider } from '../axis';
+import { VislibLibChartTitleProvider } from '../chart_title';
+
+export function VislibLibLayoutLayoutProvider(Private) {
 
   const layoutType = Private(VislibLibLayoutLayoutTypesProvider);
-  const Axis = Private(AxisProvider);
+  const Axis = Private(VislibLibAxisProvider);
+  const ChartTitle = Private(VislibLibChartTitleProvider);
   /**
    * Builds the visualization DOM layout
    *
@@ -66,22 +88,25 @@ export default function LayoutFactory(Private) {
       const axisConfig = visConfig.get('categoryAxes[0]');
       const axis = new Axis(visConfig, axisConfig);
       const position = axis.axisConfig.get('position');
+      const chartTitle = new ChartTitle(visConfig);
 
-      const el = $(this.el).find(`.axis-wrapper-${position}`);
+      const axisWrapperElement = $(this.el).find(`.visAxis__column--${position}`);
 
-      el.css('visibility', 'hidden');
+      axisWrapperElement.css('visibility', 'hidden');
       axis.render();
-      const width = el.width();
-      const height = el.height();
+      chartTitle.render();
+      const width = axisWrapperElement.width();
+      const height = axisWrapperElement.height();
       axis.destroy();
-      el.css('visibility', '');
+      $(this.el).find('.chart-title svg').remove();
+      axisWrapperElement.css('visibility', '');
+
 
       if (axis.axisConfig.isHorizontal()) {
-        const spacerNodes = $(this.el).find(`.y-axis-spacer-block-${position}`);
-        el.height(`${height}px`);
-        spacerNodes.height(el.height());
+        const spacerNodes = $(this.el).find(`.visAxis__spacer--y-${position}`);
+        spacerNodes.height(`${height}px`);
       } else {
-        el.find('.y-axis-div-wrapper').width(`${width}px`);
+        axisWrapperElement.find('.visAxis__splitAxes--y').width(`${width}px`);
       }
     }
 
@@ -160,8 +185,8 @@ export default function LayoutFactory(Private) {
       }
 
       return d3.select(el)
-      .append(type)
-      .attr('class', className);
+        .append(type)
+        .attr('class', className);
     }
 
     /**

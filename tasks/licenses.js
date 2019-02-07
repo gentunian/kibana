@@ -1,77 +1,68 @@
-import _ from 'lodash';
-import { fromNode } from 'bluebird';
-import npm from 'npm';
-import npmLicense from 'license-checker';
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+import { getInstalledPackages } from '../src/dev/npm';
+import {
+  assertLicensesValid,
+  LICENSE_WHITELIST,
+  DEV_ONLY_LICENSE_WHITELIST,
+  LICENSE_OVERRIDES,
+} from '../src/dev/license_checker';
 
 export default function licenses(grunt) {
   grunt.registerTask('licenses', 'Checks dependency licenses', async function () {
-    const config = this.options();
     const done = this.async();
 
-    const result = [];
-    const options = {
-      start: process.cwd(),
-      production: true,
-      json: true
-    };
+    try {
+      const dev = Boolean(grunt.option('dev'));
 
-    const packages = await fromNode(cb => {
-      npmLicense.init(options, (result, error) => {
-        cb(undefined, result);
+      // Get full packages list according dev flag
+      const packages = await getInstalledPackages({
+        directory: grunt.config.get('root'),
+        licenseOverrides: LICENSE_OVERRIDES,
+        dev
       });
-    });
+      // Filter the packages only used in production
+      const prodPackages = packages.filter(pkg => !pkg.isDevOnly);
 
-    /**
-     * Licenses for a package by name with overrides
-     *
-     * @param {String} name
-     * @return {Array}
-     */
+      // Assert if the found licenses in the production
+      // packages are valid
+      assertLicensesValid({
+        packages: prodPackages,
+        validLicenses: LICENSE_WHITELIST
+      });
 
-    function licensesForPackage(name) {
-      let licenses = packages[name].licenses;
+      // Do the same as above for the packages only used in development
+      // if the dev flag is found
+      if (dev) {
+        const devPackages = packages.filter(pkg => pkg.isDevOnly);
 
-      if (config.overrides.hasOwnProperty(name)) {
-        licenses = config.overrides[name];
+        assertLicensesValid({
+          packages: devPackages,
+          validLicenses: LICENSE_WHITELIST.concat(DEV_ONLY_LICENSE_WHITELIST)
+        });
       }
 
-      return typeof licenses === 'string' ? [licenses] : licenses;
+      done();
+    } catch (err) {
+      grunt.fail.fatal(err);
+      done(err);
     }
-
-    /**
-     * Determine if a package has a valid license
-     *
-     * @param {String} name
-     * @return {Boolean}
-     */
-
-    function isInvalidLicense(name) {
-      const licenses = licensesForPackage(name);
-
-      // verify all licenses for the package are in the config
-      return _.intersection(licenses, config.licenses).length < licenses.length;
-    }
-
-    // Build object containing only invalid packages
-    const invalidPackages = _.pick(packages, (pkg, name) => {
-      return isInvalidLicense(name);
-    });
-
-    if (Object.keys(invalidPackages).length) {
-      const util = require('util');
-      const execSync = require('child_process').execSync;
-      const names = Object.keys(invalidPackages);
-
-      // Uses npm ls to create tree for package locations
-      const tree = execSync(`npm ls ${names.join(' ')}`);
-
-      grunt.log.debug(JSON.stringify(invalidPackages, null, 2));
-      grunt.fail.warn(
-        `Non-confirming licenses:\n ${names.join('\n ')}\n\n${tree}`,
-        invalidPackages.length
-      );
-    }
-
-    done();
   });
 }

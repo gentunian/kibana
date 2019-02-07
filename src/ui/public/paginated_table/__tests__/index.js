@@ -1,9 +1,27 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 
 import _ from 'lodash';
-import sinon from 'sinon';
 import expect from 'expect.js';
 import ngMock from 'ng_mock';
-import 'ui/paginated_table';
+import '..';
 import $ from 'jquery';
 
 describe('paginated table', function () {
@@ -11,8 +29,6 @@ describe('paginated table', function () {
   let $rootScope;
   let $compile;
   let $scope;
-  let $elScope;
-  let $orderBy;
   const defaultPerPage = 10;
 
   const makeData = function (colCount, rowCount) {
@@ -21,24 +37,32 @@ describe('paginated table', function () {
 
     if (_.isNumber(colCount)) {
       _.times(colCount, function (i) {
-        columns.push({ title: 'column' + i });
+        columns.push({ id: i, title: 'column' + i, formatter: { convert: _.identity } });
       });
     } else {
-      columns = colCount;
+      columns = colCount.map((col, i) => ({
+        id: i,
+        title: col.title,
+        formatter: col.formatter || { convert: _.identity }
+      }));
     }
 
     if (_.isNumber(rowCount)) {
-      _.times(rowCount, function (col) {
-        const rowItems = [];
+      _.times(rowCount, function (row) {
+        const rowItems = {};
 
-        _.times(columns.length, function (row) {
-          rowItems.push('item' + col + row);
+        _.times(columns.length, function (col) {
+          rowItems[col] = 'item' + col + row;
         });
 
         rows.push(rowItems);
       });
     } else {
-      rows = rowCount;
+      rows = rowCount.map(row => {
+        const newRow = {};
+        row.forEach((v, i) => newRow[i] = v);
+        return newRow;
+      });
     }
 
     return {
@@ -47,7 +71,8 @@ describe('paginated table', function () {
     };
   };
 
-  const renderTable = function (cols, rows, perPage, sort, showBlankRows, linkToTop) {
+  const renderTable = function (table, cols, rows, perPage, sort, showBlankRows, linkToTop) {
+    $scope.table = table || { columns: [], rows: [] };
     $scope.cols = cols || [];
     $scope.rows = rows || [];
     $scope.perPage = perPage || defaultPerPage;
@@ -57,6 +82,7 @@ describe('paginated table', function () {
 
     const template = `
       <paginated-table
+        table="table"
         columns="cols"
         rows="rows"
         per-page="perPage"
@@ -69,10 +95,9 @@ describe('paginated table', function () {
   };
 
   beforeEach(ngMock.module('kibana'));
-  beforeEach(ngMock.inject(function (_$rootScope_, _$compile_, $filter) {
+  beforeEach(ngMock.inject(function (_$rootScope_, _$compile_) {
     $rootScope = _$rootScope_;
     $compile = _$compile_;
-    $orderBy = $filter('orderBy');
     $scope = $rootScope.$new();
   }));
 
@@ -83,8 +108,8 @@ describe('paginated table', function () {
       }];
       const rows = [];
 
-      renderTable(cols, rows);
-      expect($el.children().size()).to.be(0);
+      renderTable(null, cols, rows);
+      expect($el.children().length).to.be(0);
     });
 
     it('should render columns and rows', function () {
@@ -92,11 +117,11 @@ describe('paginated table', function () {
       const cols = data.columns;
       const rows = data.rows;
 
-      renderTable(cols, rows);
-      expect($el.children().size()).to.be(1);
+      renderTable(data, cols, rows);
+      expect($el.children().length).to.be(1);
       const tableRows = $el.find('tbody tr');
       // should pad rows
-      expect(tableRows.size()).to.be(defaultPerPage);
+      expect(tableRows.length).to.be(defaultPerPage);
       // should contain the row data
       expect(tableRows.eq(0).find('td').eq(0).text()).to.be(rows[0][0]);
       expect(tableRows.eq(0).find('td').eq(1).text()).to.be(rows[0][1]);
@@ -111,38 +136,37 @@ describe('paginated table', function () {
       const data = makeData(3, rowCount);
       const pageCount = Math.ceil(rowCount / perPageCount);
 
-      renderTable(data.columns, data.rows, perPageCount);
+      renderTable(data, data.columns, data.rows, perPageCount);
       const tableRows = $el.find('tbody tr');
-      expect(tableRows.size()).to.be(perPageCount);
+      expect(tableRows.length).to.be(perPageCount);
       // add 2 for the first and last page links
-      expect($el.find('paginate-controls a').size()).to.be(pageCount + 2);
+      expect($el.find('paginate-controls button').length).to.be(pageCount + 2);
     });
 
     it('should not show blank rows on last page when so specified', function () {
       const rowCount = 7;
       const perPageCount = 10;
       const data = makeData(3, rowCount);
-      const pageCount = Math.ceil(rowCount / perPageCount);
 
-      renderTable(data.columns, data.rows, perPageCount, null, false);
+      renderTable(data, data.columns, data.rows, perPageCount, null, false);
       const tableRows = $el.find('tbody tr');
-      expect(tableRows.size()).to.be(rowCount);
+      expect(tableRows.length).to.be(rowCount);
     });
 
     it('should not show link to top when not set', function () {
       const data = makeData(5, 5);
-      renderTable(data.columns, data.rows, 10, null, false);
+      renderTable(data, data.columns, data.rows, 10, null, false);
 
       const linkToTop = $el.find('[data-test-subj="paginateControlsLinkToTop"]');
-      expect(linkToTop.size()).to.be(0);
+      expect(linkToTop.length).to.be(0);
     });
 
     it('should show link to top when set', function () {
       const data = makeData(5, 5);
-      renderTable(data.columns, data.rows, 10, null, false, true);
+      renderTable(data, data.columns, data.rows, 10, null, false, true);
 
       const linkToTop = $el.find('[data-test-subj="paginateControlsLinkToTop"]');
-      expect(linkToTop.size()).to.be(1);
+      expect(linkToTop.length).to.be(1);
     });
 
   });
@@ -161,7 +185,7 @@ describe('paginated table', function () {
       ]);
 
       lastRowIndex = data.rows.length - 1;
-      renderTable(data.columns, data.rows);
+      renderTable(data, data.columns, data.rows);
       paginatedTable = $el.isolateScope().paginatedTable;
     });
 
@@ -199,7 +223,7 @@ describe('paginated table', function () {
       expect(tableRows.eq(0).find('td').eq(2).text()).to.be('zzzz');
     });
 
-    it('should set the sort direction to asc when it\'s not explicity set', function () {
+    it('should set the sort direction to asc when it\'s not explicitly set', function () {
       paginatedTable.sortColumn(1);
       $scope.$digest();
 
@@ -287,7 +311,7 @@ describe('paginated table', function () {
       ];
       data = makeData(cols, rows);
 
-      renderTable(data.columns, data.rows);
+      renderTable(data, data.columns, data.rows);
       paginatedTable = $el.isolateScope().paginatedTable;
     });
 
@@ -356,43 +380,44 @@ describe('paginated table', function () {
 
     beforeEach(function () {
       cols = [{
-        title: 'object test'
+        title: 'object test',
+        id: 0,
+        formatter: { convert: val => {
+          return val === 'zzz' ? '<h1>hello</h1>' : val;
+        } }
       }];
       rows = [
         ['aaaa'],
-        [{
-          markup: '<h1>I am HTML in a row</h1>',
-          value: 'zzzz'
-        }],
+        ['zzz'],
         ['bbbb']
       ];
-      renderTable(cols, rows);
+      renderTable({ columns: cols, rows }, cols, rows);
       paginatedTable = $el.isolateScope().paginatedTable;
     });
 
     it('should append object markup', function () {
       const tableRows = $el.find('tbody tr');
-      expect(tableRows.eq(0).find('h1').size()).to.be(0);
-      expect(tableRows.eq(1).find('h1').size()).to.be(1);
-      expect(tableRows.eq(2).find('h1').size()).to.be(0);
+      expect(tableRows.eq(0).find('h1').length).to.be(0);
+      expect(tableRows.eq(1).find('h1').length).to.be(1);
+      expect(tableRows.eq(2).find('h1').length).to.be(0);
     });
 
     it('should sort using object value', function () {
       paginatedTable.sortColumn(0);
       $scope.$digest();
       let tableRows = $el.find('tbody tr');
-      expect(tableRows.eq(0).find('h1').size()).to.be(0);
-      expect(tableRows.eq(1).find('h1').size()).to.be(0);
+      expect(tableRows.eq(0).find('h1').length).to.be(0);
+      expect(tableRows.eq(1).find('h1').length).to.be(0);
       // html row should be the last row
-      expect(tableRows.eq(2).find('h1').size()).to.be(1);
+      expect(tableRows.eq(2).find('h1').length).to.be(1);
 
       paginatedTable.sortColumn(0);
       $scope.$digest();
       tableRows = $el.find('tbody tr');
       // html row should be the first row
-      expect(tableRows.eq(0).find('h1').size()).to.be(1);
-      expect(tableRows.eq(1).find('h1').size()).to.be(0);
-      expect(tableRows.eq(2).find('h1').size()).to.be(0);
+      expect(tableRows.eq(0).find('h1').length).to.be(1);
+      expect(tableRows.eq(1).find('h1').length).to.be(0);
+      expect(tableRows.eq(2).find('h1').length).to.be(0);
     });
   });
 });

@@ -1,13 +1,31 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import _ from 'lodash';
 import expect from 'expect.js';
 import ngMock from 'ng_mock';
-import TopHitProvider from 'ui/agg_types/metrics/top_hit';
-import VisProvider from 'ui/vis';
+import { topHitMetricAgg } from '../../metrics/top_hit';
+import { VisProvider } from '../../../vis';
 import StubbedIndexPattern from 'fixtures/stubbed_logstash_index_pattern';
 
 describe('Top hit metric', function () {
   let aggDsl;
-  let topHitMetric;
   let aggConfig;
 
   function init({ field, sortOrder = 'desc', aggregate = 'concat', size = 1 }) {
@@ -15,7 +33,6 @@ describe('Top hit metric', function () {
     ngMock.inject(function (Private) {
       const Vis = Private(VisProvider);
       const indexPattern = Private(StubbedIndexPattern);
-      topHitMetric = Private(TopHitProvider);
 
       const params = {};
       if (field) {
@@ -32,8 +49,7 @@ describe('Top hit metric', function () {
         title: 'New Visualization',
         type: 'metric',
         params: {
-          fontSize: 60,
-          handleNoResults: true
+          fontSize: 60
         },
         aggs: [
           {
@@ -54,7 +70,7 @@ describe('Top hit metric', function () {
 
   it('should return a label prefixed with Last if sorting in descending order', function () {
     init({ field: 'bytes' });
-    expect(topHitMetric.makeLabel(aggConfig)).to.eql('Last bytes');
+    expect(topHitMetricAgg.makeLabel(aggConfig)).to.eql('Last bytes');
   });
 
   it('should return a label prefixed with First if sorting in ascending order', function () {
@@ -62,7 +78,7 @@ describe('Top hit metric', function () {
       field: 'bytes',
       sortOrder: 'asc'
     });
-    expect(topHitMetric.makeLabel(aggConfig)).to.eql('First bytes');
+    expect(topHitMetricAgg.makeLabel(aggConfig)).to.eql('First bytes');
   });
 
   it('should request the _source field', function () {
@@ -71,15 +87,33 @@ describe('Top hit metric', function () {
     expect(aggDsl.top_hits.docvalue_fields).to.be(undefined);
   });
 
-  it('should request both for the source and doc_values fields', function () {
+  it('requests both source and docvalues_fields for non-text aggregatable fields', function () {
     init({ field: 'bytes' });
     expect(aggDsl.top_hits._source).to.be('bytes');
-    expect(aggDsl.top_hits.docvalue_fields).to.eql([ 'bytes' ]);
+    expect(aggDsl.top_hits.docvalue_fields).to.eql([ { field: 'bytes', format: 'use_field_mapping' } ]);
   });
 
-  it('should only request for the source if the field does not have the doc_values property', function () {
-    init({ field: 'ssl' });
-    expect(aggDsl.top_hits._source).to.be('ssl');
+  it('requests both source and docvalues_fields for date aggregatable fields', function () {
+    init({ field: '@timestamp' });
+    expect(aggDsl.top_hits._source).to.be('@timestamp');
+    expect(aggDsl.top_hits.docvalue_fields).to.eql([ { field: '@timestamp', format: 'date_time' } ]);
+  });
+
+  it('requests just source for aggregatable text fields', function () {
+    init({ field: 'machine.os' });
+    expect(aggDsl.top_hits._source).to.be('machine.os');
+    expect(aggDsl.top_hits.docvalue_fields).to.be(undefined);
+  });
+
+  it('requests just source for not-aggregatable text fields', function () {
+    init({ field: 'non-sortable' });
+    expect(aggDsl.top_hits._source).to.be('non-sortable');
+    expect(aggDsl.top_hits.docvalue_fields).to.be(undefined);
+  });
+
+  it('requests just source for not-aggregatable, non-text fields', function () {
+    init({ field: 'hashed' });
+    expect(aggDsl.top_hits._source).to.be('hashed');
     expect(aggDsl.top_hits.docvalue_fields).to.be(undefined);
   });
 
@@ -94,7 +128,7 @@ describe('Top hit metric', function () {
       };
 
       init({ field: '@tags' });
-      expect(topHitMetric.getValue(aggConfig, bucket)).to.be(null);
+      expect(topHitMetricAgg.getValue(aggConfig, bucket)).to.be(null);
     });
 
     it('should return undefined if the field does not appear in the source', function () {
@@ -113,7 +147,7 @@ describe('Top hit metric', function () {
       };
 
       init({ field: '@tags' });
-      expect(topHitMetric.getValue(aggConfig, bucket)).to.be(undefined);
+      expect(topHitMetricAgg.getValue(aggConfig, bucket)).to.be(undefined);
     });
 
     it('should return the field value from the top hit', function () {
@@ -132,7 +166,7 @@ describe('Top hit metric', function () {
       };
 
       init({ field: '@tags' });
-      expect(topHitMetric.getValue(aggConfig, bucket)).to.be('aaa');
+      expect(topHitMetricAgg.getValue(aggConfig, bucket)).to.be('aaa');
     });
 
     it('should return the object if the field value is an object', function () {
@@ -153,7 +187,7 @@ describe('Top hit metric', function () {
       };
 
       init({ field: '@tags' });
-      expect(topHitMetric.getValue(aggConfig, bucket)).to.eql({ label: 'aaa' });
+      expect(topHitMetricAgg.getValue(aggConfig, bucket)).to.eql({ label: 'aaa' });
     });
 
     it('should return an array if the field has more than one values', function () {
@@ -172,7 +206,7 @@ describe('Top hit metric', function () {
       };
 
       init({ field: '@tags' });
-      expect(topHitMetric.getValue(aggConfig, bucket)).to.eql([ 'aaa', 'bbb' ]);
+      expect(topHitMetricAgg.getValue(aggConfig, bucket)).to.eql([ 'aaa', 'bbb' ]);
     });
 
     it('should get the value from the doc_values field if the source does not have that field', function () {
@@ -194,7 +228,7 @@ describe('Top hit metric', function () {
       };
 
       init({ field: 'machine.os.raw' });
-      expect(topHitMetric.getValue(aggConfig, bucket)).to.be('linux');
+      expect(topHitMetricAgg.getValue(aggConfig, bucket)).to.be('linux');
     });
 
     it('should return undefined if the field is not in the source nor in the doc_values field', function () {
@@ -216,7 +250,7 @@ describe('Top hit metric', function () {
       };
 
       init({ field: 'machine.os.raw' });
-      expect(topHitMetric.getValue(aggConfig, bucket)).to.be(undefined);
+      expect(topHitMetricAgg.getValue(aggConfig, bucket)).to.be(undefined);
     });
 
     describe('Multivalued field and first/last X docs', function () {
@@ -225,7 +259,7 @@ describe('Top hit metric', function () {
           field: 'bytes',
           size: 2
         });
-        expect(topHitMetric.makeLabel(aggConfig)).to.eql('Last 2 bytes');
+        expect(topHitMetricAgg.makeLabel(aggConfig)).to.eql('Last 2 bytes');
       });
 
       it('should return a label prefixed with First X docs if sorting in ascending order', function () {
@@ -234,7 +268,7 @@ describe('Top hit metric', function () {
           size: 2,
           sortOrder: 'asc'
         });
-        expect(topHitMetric.makeLabel(aggConfig)).to.eql('First 2 bytes');
+        expect(topHitMetricAgg.makeLabel(aggConfig)).to.eql('First 2 bytes');
       });
 
       [
@@ -293,50 +327,50 @@ describe('Top hit metric', function () {
           result: null
         }
       ]
-      .forEach(agg => {
-        it(`should return the result of the ${agg.type} aggregation over the last doc - ${agg.description}`, function () {
-          const bucket = {
-            '1': {
-              hits: {
-                hits: [
-                  {
-                    _source: {
-                      bytes: agg.data
+        .forEach(agg => {
+          it(`should return the result of the ${agg.type} aggregation over the last doc - ${agg.description}`, function () {
+            const bucket = {
+              '1': {
+                hits: {
+                  hits: [
+                    {
+                      _source: {
+                        bytes: agg.data
+                      }
                     }
-                  }
-                ]
+                  ]
+                }
               }
-            }
-          };
+            };
 
-          init({ field: 'bytes', aggregate: agg.type });
-          expect(topHitMetric.getValue(aggConfig, bucket)).to.eql(agg.result);
-        });
+            init({ field: 'bytes', aggregate: agg.type });
+            expect(topHitMetricAgg.getValue(aggConfig, bucket)).to.eql(agg.result);
+          });
 
-        it(`should return the result of the ${agg.type} aggregation over the last X docs - ${agg.description}`, function () {
-          const bucket = {
-            '1': {
-              hits: {
-                hits: [
-                  {
-                    _source: {
-                      bytes: _.dropRight(agg.data, 1)
+          it(`should return the result of the ${agg.type} aggregation over the last X docs - ${agg.description}`, function () {
+            const bucket = {
+              '1': {
+                hits: {
+                  hits: [
+                    {
+                      _source: {
+                        bytes: _.dropRight(agg.data, 1)
+                      }
+                    },
+                    {
+                      _source: {
+                        bytes: _.last(agg.data)
+                      }
                     }
-                  },
-                  {
-                    _source: {
-                      bytes: _.last(agg.data)
-                    }
-                  }
-                ]
+                  ]
+                }
               }
-            }
-          };
+            };
 
-          init({ field: 'bytes', aggregate: agg.type });
-          expect(topHitMetric.getValue(aggConfig, bucket)).to.eql(agg.result);
+            init({ field: 'bytes', aggregate: agg.type });
+            expect(topHitMetricAgg.getValue(aggConfig, bucket)).to.eql(agg.result);
+          });
         });
-      });
     });
   });
 });

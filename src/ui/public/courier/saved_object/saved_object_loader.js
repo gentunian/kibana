@@ -1,17 +1,35 @@
-import _ from 'lodash';
-import Scanner from 'ui/utils/scanner';
-import { StringUtils } from 'ui/utils/string_utils';
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+import { Scanner } from '../../utils/scanner';
+import { StringUtils } from '../../utils/string_utils';
 
 export class SavedObjectLoader {
-  constructor(SavedObjectClass, kbnIndex, esAdmin, kbnUrl) {
+  constructor(SavedObjectClass, kbnIndex, kbnUrl, $http, chrome, savedObjectClient) {
     this.type = SavedObjectClass.type;
     this.Class = SavedObjectClass;
     this.lowercaseType = this.type.toLowerCase();
     this.kbnIndex = kbnIndex;
     this.kbnUrl = kbnUrl;
-    this.esAdmin = esAdmin;
+    this.chrome = chrome;
 
-    this.scanner = new Scanner(esAdmin, {
+    this.scanner = new Scanner($http, {
       index: kbnIndex,
       type: this.lowercaseType
     });
@@ -21,6 +39,8 @@ export class SavedObjectLoader {
       noun: StringUtils.upperFirst(this.type),
       nouns: `${ this.lowercaseType }s`,
     };
+
+    this.savedObjectsClient = savedObjectClient;
   }
 
   /**
@@ -38,26 +58,30 @@ export class SavedObjectLoader {
   }
 
   delete(ids) {
-    ids = !_.isArray(ids) ? [ids] : ids;
+    ids = !Array.isArray(ids) ? [ids] : ids;
 
     const deletions = ids.map(id => {
       const savedObject = new this.Class(id);
       return savedObject.delete();
     });
 
-    return Promise.all(deletions);
+    return Promise.all(deletions).then(() => {
+      if (this.chrome) {
+        this.chrome.untrackNavLinksForDeletedSavedObjects(ids);
+      }
+    });
   }
 
   /**
-   * Updates hit._source to contain an id and url field, and returns the updated
+   * Updates source to contain an id and url field, and returns the updated
    * source object.
-   * @param hit
-   * @returns {hit._source} The modified hit._source object, with an id and url field.
+   * @param source
+   * @param id
+   * @returns {source} The modified source object, with an id and url field.
    */
-  mapHits(hit) {
-    const source = hit._source;
-    source.id = hit._id;
-    source.url = this.urlFor(hit._id);
+  mapHitSource(source, id) {
+    source.id = id;
+    source.url = this.urlFor(id);
     return source;
   }
 
@@ -65,7 +89,17 @@ export class SavedObjectLoader {
     return this.scanner.scanAndMap(queryString, {
       pageSize,
       docCount: Infinity
-    }, (hit) => this.mapHits(hit));
+    });
+  }
+
+  /**
+   * Updates hit.attributes to contain an id and url field, and returns the updated
+   * attributes object.
+   * @param hit
+   * @returns {hit.attributes} The modified hit.attributes object, with an id and url field.
+   */
+  mapSavedObjectApiHits(hit) {
+    return this.mapHitSource(hit.attributes, hit.id);
   }
 
   /**
@@ -76,47 +110,31 @@ export class SavedObjectLoader {
    * @param size
    * @returns {Promise}
    */
-  find(searchString, size = 100) {
-    let body;
-
-    if (searchString) {
-      body = {
-        query: {
-          query_string: {
-            query: /^\w+$/.test(searchString) ? `${searchString}*` : searchString,
-            fields: ['title^3', 'description'],
-            default_operator: 'AND'
-          }
-        }
+  findAll(search = '', size = 100, fields) {
+    return this.savedObjectsClient.find(
+      {
+        type: this.lowercaseType,
+        search: search ? `${search}*` : undefined,
+        perPage: size,
+        page: 1,
+        searchFields: ['title^3', 'description'],
+        defaultSearchOperator: 'AND',
+        fields,
+      }).then((resp) => {
+      return {
+        total: resp.total,
+        hits: resp.savedObjects
+          .map((savedObject) => this.mapSavedObjectApiHits(savedObject))
       };
-    } else {
-      body = { query: { match_all: {} } };
-    }
+    });
+  }
 
-    return this.esAdmin.search({
-      index: this.kbnIndex,
-      type: this.lowercaseType,
-      body,
-      size
-    })
-      .catch(err => {
-        // attempt to mimic simple_query_string, swallow formatting error
-        if (err.statusCode === 400) {
-          return {
-            hits: {
-              total: 0,
-              hits: [],
-            }
-          };
-        }
-
-        throw err;
-      })
-      .then((resp) => {
-        return {
-          total: resp.hits.total,
-          hits: resp.hits.hits.map((hit) => this.mapHits(hit))
-        };
-      });
+  find(search = '', size = 100) {
+    return this.findAll(search, size).then(resp => {
+      return {
+        total: resp.total,
+        hits: resp.hits.filter(savedObject => !savedObject.error)
+      };
+    });
   }
 }

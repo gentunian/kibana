@@ -1,13 +1,32 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import _ from 'lodash';
 import d3 from 'd3';
-import SCALE_MODES from './scale_modes';
+import { SCALE_MODES } from './scale_modes';
 
-export default function AxisConfigFactory() {
+export function VislibLibAxisConfigProvider() {
 
   const defaults = {
     show: true,
     type: 'value',
-    elSelector: '.axis-wrapper-{pos} .axis-div',
+    elSelector: '.visAxis__column--{pos} .axis-div',
     position: 'left',
     scale: {
       type: 'linear',
@@ -42,7 +61,7 @@ export default function AxisConfigFactory() {
     },
     title: {
       text: '',
-      elSelector: '.axis-wrapper-{pos} .axis-title'
+      elSelector: '.visAxis__column--{pos} .axis-div',
     }
   };
 
@@ -77,14 +96,17 @@ export default function AxisConfigFactory() {
       const typeDefaults = axisConfigArgs.type === 'category' ? categoryDefaults : valueDefaults;
       // _.defaultsDeep mutates axisConfigArgs nested values so we clone it first
       const axisConfigArgsClone = _.cloneDeep(axisConfigArgs);
+      const isCategoryAxis = axisConfigArgsClone.type === 'category';
+      const isHorizontal = axisConfigArgsClone.position && ['top', 'bottom'].includes(axisConfigArgsClone.position);
+
+      _.merge(typeDefaults, isHorizontal || isCategoryAxis ? horizontalDefaults : verticalDefaults);
       this._values = _.defaultsDeep({}, axisConfigArgsClone, typeDefaults, defaults);
-      _.merge(this._values, this.isHorizontal() ? horizontalDefaults : verticalDefaults);
 
       this._values.elSelector = this._values.elSelector.replace('{pos}', this._values.position);
       this._values.rootEl = chartConfig.get('el');
 
       this.data = chartConfig.data;
-      if (this._values.type === 'category') {
+      if (isCategoryAxis) {
         if (!this._values.values) {
           this.values = this.data.xValues(chartConfig.get('orderBucketsBySum', false));
           this.ordered = this.data.get('ordered');
@@ -113,7 +135,6 @@ export default function AxisConfigFactory() {
         // override axisFormatter (to replicate current behaviour)
         if (this.isPercentage()) {
           this._values.labels.axisFormatter = d3.format('%');
-          this._values.scale.defaultYExtents = true;
         }
 
         if (this.isLogScale()) {
@@ -121,12 +142,21 @@ export default function AxisConfigFactory() {
         }
       }
 
+      if (axisConfigArgs.title == null || axisConfigArgs.title.text == null) {
+        const label = isCategoryAxis ? 'xAxisLabel' : 'yAxisLabel';
+        this.set('title.text', this.data.get(label));
+      }
+
       // horizontal axis with ordinal scale should have labels rotated (so we can fit more)
-      // unless explicitly overriden by user
+      // unless explicitly overridden by user
       if (this.isHorizontal() && this.isOrdinal()) {
         this._values.labels.filter = _.get(axisConfigArgs, 'labels.filter', false);
         this._values.labels.rotate = _.get(axisConfigArgs, 'labels.rotate', 90);
         this._values.labels.truncate = _.get(axisConfigArgs, 'labels.truncate', 100);
+      }
+
+      if (this.get('type') === 'category' && !this.isHorizontal()) {
+        this._values.scale.inverted = _.get(axisConfigArgs, 'scale.inverted', true);
       }
 
       let offset;
@@ -138,9 +168,32 @@ export default function AxisConfigFactory() {
           break;
         case SCALE_MODES.GROUPED:
           offset = 'group';
+          stacked = false;
           break;
         case SCALE_MODES.PERCENTAGE:
-          offset = 'expand';
+          offset = function expand(data) {
+            // taken from https://github.com/d3/d3/blob/v3.5.6/src/layout/stack.js#L193
+            // fixed to support zeros
+            const n = data.length;
+            const m = data[0].length;
+            const y0 = [];
+
+            for (let j = 0; j < m; ++j) {
+              let o = 0;
+              for (let i = 0; i < n; i++) {
+                o += data[i][j][1];
+              }
+              if (o) {
+                for (let i = 0; i < n; i++) {
+                  data[i][j][1] /= o;
+                }
+              }
+            }
+            for (let j = 0; j < m; ++j) {
+              y0[j] = 0;
+            }
+            return y0;
+          };
           break;
         default:
           offset = this.get('scale.mode');
@@ -151,12 +204,12 @@ export default function AxisConfigFactory() {
     }
 
     get(property, defaults) {
-      if (typeof defaults !== 'undefined' || _.has(this._values, property)) {
-        return _.get(this._values, property, defaults);
-      } else {
+      if (typeof defaults === 'undefined' && !_.has(this._values, property)) {
         throw new Error(`Accessing invalid config property: ${property}`);
-        return defaults;
       }
+      const val = _.get(this._values, property, defaults);
+      if (val == null && defaults != null) return defaults;
+      return val;
     }
 
     set(property, value) {

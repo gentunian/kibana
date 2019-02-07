@@ -1,211 +1,155 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
 
 import expect from 'expect.js';
 
-import {
-  bdd,
-  scenarioManager,
-} from '../../../support';
+export default function ({ getService, getPageObjects }) {
+  const log = getService('log');
+  const retry = getService('retry');
+  const inspector = getService('inspector');
+  const PageObjects = getPageObjects(['common', 'visualize', 'timePicker']);
 
-import PageObjects from '../../../support/page_objects';
+  describe('metric chart', function () {
+    const fromTime = '2015-09-19 06:31:44.000';
+    const toTime = '2015-09-23 18:31:44.000';
 
-bdd.describe('visualize app', function describeIndexTests() {
-  const fromTime = '2015-09-19 06:31:44.000';
-  const toTime = '2015-09-23 18:31:44.000';
-
-  bdd.before(function () {
-    PageObjects.common.debug('navigateToApp visualize');
-    return PageObjects.common.navigateToUrl('visualize', 'new')
-    .then(function () {
-      PageObjects.common.debug('clickMetric');
-      return PageObjects.visualize.clickMetric();
-    })
-    .then(function clickNewSearch() {
-      return PageObjects.visualize.clickNewSearch();
-    })
-    .then(function setAbsoluteRange() {
-      PageObjects.common.debug('Set absolute time range from \"' + fromTime + '\" to \"' + toTime + '\"');
-      return PageObjects.header.setAbsoluteRange(fromTime, toTime);
+    before(async function () {
+      log.debug('navigateToApp visualize');
+      await PageObjects.visualize.navigateToNewVisualization();
+      log.debug('clickMetric');
+      await PageObjects.visualize.clickMetric();
+      await PageObjects.visualize.clickNewSearch();
+      await PageObjects.timePicker.setAbsoluteRange(fromTime, toTime);
     });
-  });
 
-  bdd.describe('metric chart', function indexPatternCreation() {
+    it('should have inspector enabled', async function () {
+      await inspector.expectIsEnabled();
+    });
 
-    bdd.it('should show Count', function () {
+    it('should show Count', async function () {
       const expectedCount = ['14,004', 'Count'];
 
       // initial metric of "Count" is selected by default
-      return PageObjects.common.try(function tryingForTime() {
-        return PageObjects.visualize.getMetric()
-        .then(function (metricValue) {
-          PageObjects.common.saveScreenshot('Visualize-metric-chart');
-          expect(expectedCount).to.eql(metricValue.split('\n'));
-        });
+      await retry.try(async function tryingForTime() {
+        const metricValue = await PageObjects.visualize.getMetric();
+        expect(expectedCount).to.eql(metricValue.split('\n'));
       });
     });
 
-    bdd.it('should show Average', function () {
+    it('should show Average', async function () {
       const avgMachineRam = ['13,104,036,080.615', 'Average machine.ram'];
-      return PageObjects.visualize.clickMetricEditor()
-      .then(function () {
-        PageObjects.common.debug('Aggregation = Average');
-        return PageObjects.visualize.selectAggregation('Average');
-      })
-      .then(function selectField() {
-        PageObjects.common.debug('Field = machine.ram');
-        return PageObjects.visualize.selectField('machine.ram');
-      })
-      .then(function clickGo() {
-        return PageObjects.visualize.clickGo();
-      })
-      .then(function () {
-        return PageObjects.common.try(function tryingForTime() {
-          return PageObjects.visualize.getMetric()
-            .then(function (metricValue) {
-              expect(avgMachineRam).to.eql(metricValue.split('\n'));
-            });
-        });
+      await PageObjects.visualize.clickMetricEditor();
+      log.debug('Aggregation = Average');
+      await PageObjects.visualize.selectAggregation('Average');
+      log.debug('Field = machine.ram');
+      await PageObjects.visualize.selectField('machine.ram', 'metrics');
+      await PageObjects.visualize.clickGo();
+      await retry.try(async function tryingForTime() {
+        const metricValue = await PageObjects.visualize.getMetric();
+        expect(avgMachineRam).to.eql(metricValue.split('\n'));
       });
     });
 
-    bdd.it('should show Sum', function () {
+    it('should show Sum', async function () {
       const sumPhpMemory = ['85,865,880', 'Sum of phpmemory'];
-      PageObjects.common.debug('Aggregation = Sum');
-      return PageObjects.visualize.selectAggregation('Sum')
-      .then(function selectField() {
-        PageObjects.common.debug('Field = phpmemory');
-        return PageObjects.visualize.selectField('phpmemory');
-      })
-      .then(function clickGo() {
-        return PageObjects.visualize.clickGo();
-      })
-      .then(function () {
-        return PageObjects.common.try(function tryingForTime() {
-          return PageObjects.visualize.getMetric()
-            .then(function (metricValue) {
-              expect(sumPhpMemory).to.eql(metricValue.split('\n'));
-            });
-        });
+      log.debug('Aggregation = Sum');
+      await PageObjects.visualize.selectAggregation('Sum');
+      log.debug('Field = phpmemory');
+      await PageObjects.visualize.selectField('phpmemory', 'metrics');
+      await PageObjects.visualize.clickGo();
+      await retry.try(async function tryingForTime() {
+        const metricValue = await PageObjects.visualize.getMetric();
+        expect(sumPhpMemory).to.eql(metricValue.split('\n'));
       });
     });
 
-    bdd.it('should show Median', function () {
+    it('should show Median', async function () {
       const medianBytes = ['5,565.263', '50th percentile of bytes'];
       //  For now, only comparing the text label part of the metric
-      PageObjects.common.debug('Aggregation = Median');
-      return PageObjects.visualize.selectAggregation('Median')
-      .then(function selectField() {
-        PageObjects.common.debug('Field = bytes');
-        return PageObjects.visualize.selectField('bytes');
-      })
-      .then(function clickGo() {
-        return PageObjects.visualize.clickGo();
-      })
-      .then(function () {
-        return PageObjects.common.try(function tryingForTime() {
-          return PageObjects.visualize.getMetric()
-            .then(function (metricValue) {
-              // only comparing the text label!
-              expect(medianBytes[1]).to.eql(metricValue.split('\n')[1]);
-            });
-        });
+      log.debug('Aggregation = Median');
+      await PageObjects.visualize.selectAggregation('Median');
+      log.debug('Field = bytes');
+      await PageObjects.visualize.selectField('bytes', 'metrics');
+      await PageObjects.visualize.clickGo();
+      await retry.try(async function tryingForTime() {
+        const metricValue = await PageObjects.visualize.getMetric();
+        // only comparing the text label!
+        expect(medianBytes[1]).to.eql(metricValue.split('\n')[1]);
       });
     });
 
-    bdd.it('should show Min', function () {
+    it('should show Min', async function () {
       const minTimestamp = ['September 20th 2015, 00:00:00.000', 'Min @timestamp'];
-      PageObjects.common.debug('Aggregation = Min');
-      return PageObjects.visualize.selectAggregation('Min')
-      .then(function selectField() {
-        PageObjects.common.debug('Field = @timestamp');
-        return PageObjects.visualize.selectField('@timestamp');
-      })
-      .then(function clickGo() {
-        return PageObjects.visualize.clickGo();
-      })
-      .then(function () {
-        return PageObjects.common.try(function tryingForTime() {
-          return PageObjects.visualize.getMetric()
-            .then(function (metricValue) {
-              expect(minTimestamp).to.eql(metricValue.split('\n'));
-            });
-        });
+      log.debug('Aggregation = Min');
+      await PageObjects.visualize.selectAggregation('Min');
+      log.debug('Field = @timestamp');
+      await PageObjects.visualize.selectField('@timestamp', 'metrics');
+      await PageObjects.visualize.clickGo();
+      await retry.try(async function tryingForTime() {
+        const metricValue = await PageObjects.visualize.getMetric();
+        expect(minTimestamp).to.eql(metricValue.split('\n'));
       });
     });
 
-    bdd.it('should show Max', function () {
+    it('should show Max', async function () {
       const maxRelatedContentArticleModifiedTime = ['April 4th 2015, 00:54:41.000', 'Max relatedContent.article:modified_time'];
-      PageObjects.common.debug('Aggregation = Max');
-      return PageObjects.visualize.selectAggregation('Max')
-      .then(function selectField() {
-        PageObjects.common.debug('Field = relatedContent.article:modified_time');
-        return PageObjects.visualize.selectField('relatedContent.article:modified_time');
-      })
-      .then(function clickGo() {
-        return PageObjects.visualize.clickGo();
-      })
-      .then(function () {
-        return PageObjects.common.try(function tryingForTime() {
-          return PageObjects.visualize.getMetric()
-            .then(function (metricValue) {
-              expect(maxRelatedContentArticleModifiedTime).to.eql(metricValue.split('\n'));
-            });
-        });
+      log.debug('Aggregation = Max');
+      await PageObjects.visualize.selectAggregation('Max');
+      log.debug('Field = relatedContent.article:modified_time');
+      await PageObjects.visualize.selectField('relatedContent.article:modified_time', 'metrics');
+      await PageObjects.visualize.clickGo();
+      await retry.try(async function tryingForTime() {
+        const metricValue = await PageObjects.visualize.getMetric();
+        expect(maxRelatedContentArticleModifiedTime).to.eql(metricValue.split('\n'));
       });
     });
 
-    bdd.it('should show Standard Deviation', function () {
+    it('should show Standard Deviation', async function () {
       const standardDeviationBytes = [
         '-1,435.138', 'Lower Standard Deviation of bytes',
         '12,889.766', 'Upper Standard Deviation of bytes'
       ];
-      PageObjects.common.debug('Aggregation = Standard Deviation');
-      return PageObjects.visualize.selectAggregation('Standard Deviation')
-      .then(function selectField() {
-        PageObjects.common.debug('Field = bytes');
-        return PageObjects.visualize.selectField('bytes');
-      })
-      .then(function clickGo() {
-        return PageObjects.visualize.clickGo();
-      })
-      .then(function () {
-        return PageObjects.common.try(function tryingForTime() {
-          return PageObjects.visualize.getMetric()
-            .then(function (metricValue) {
-              expect(standardDeviationBytes).to.eql(metricValue.split('\n'));
-            });
-        });
+      log.debug('Aggregation = Standard Deviation');
+      await PageObjects.visualize.selectAggregation('Standard Deviation');
+      log.debug('Field = bytes');
+      await PageObjects.visualize.selectField('bytes', 'metrics');
+      await PageObjects.visualize.clickGo();
+      await retry.try(async function tryingForTime() {
+        const metricValue = await PageObjects.visualize.getMetric();
+        expect(standardDeviationBytes).to.eql(metricValue.split('\n'));
       });
     });
 
-    bdd.it('should show Unique Count', function () {
+    it('should show Unique Count', async function () {
       const uniqueCountClientip = ['1,000', 'Unique count of clientip'];
-      PageObjects.common.debug('Aggregation = Unique Count');
-      return PageObjects.visualize.selectAggregation('Unique Count')
-      .then(function selectField() {
-        PageObjects.common.debug('Field = clientip');
-        return PageObjects.visualize.selectField('clientip');
-      })
-      .then(function clickGo() {
-        return PageObjects.visualize.clickGo();
-      })
-      .then(function () {
-        return PageObjects.common.try(function tryingForTime() {
-          return PageObjects.visualize.getMetric()
-            .then(function (metricValue) {
-              expect(uniqueCountClientip).to.eql(metricValue.split('\n'));
-            });
-        });
-      })
-      .then(function () {
-        return PageObjects.visualize.getMetric()
-          .then(function (metricValue) {
-            PageObjects.common.debug('metricValue=' + metricValue.split('\n'));
-            expect(uniqueCountClientip).to.eql(metricValue.split('\n'));
-          });
+      log.debug('Aggregation = Unique Count');
+      await PageObjects.visualize.selectAggregation('Unique Count');
+      log.debug('Field = clientip');
+      await PageObjects.visualize.selectField('clientip', 'metrics');
+      await PageObjects.visualize.clickGo();
+      await retry.try(async function tryingForTime() {
+        const metricValue = await PageObjects.visualize.getMetric();
+        expect(uniqueCountClientip).to.eql(metricValue.split('\n'));
       });
     });
 
-    bdd.it('should show Percentiles', function () {
+    it('should show Percentiles', async function () {
       const percentileMachineRam = [
         '2,147,483,648', '1st percentile of machine.ram',
         '3,221,225,472', '5th percentile of machine.ram',
@@ -216,49 +160,31 @@ bdd.describe('visualize app', function describeIndexTests() {
         '32,212,254,720', '99th percentile of machine.ram'
       ];
 
-      PageObjects.common.debug('Aggregation = Percentiles');
-      return PageObjects.visualize.selectAggregation('Percentiles')
-      .then(function selectField() {
-        PageObjects.common.debug('Field =  machine.ram');
-        return PageObjects.visualize.selectField('machine.ram');
-      })
-      .then(function clickGo() {
-        return PageObjects.visualize.clickGo();
-      })
-      .then(function () {
-        return PageObjects.common.try(function tryingForTime() {
-          return PageObjects.visualize.getMetric()
-            .then(function (metricValue) {
-              expect(percentileMachineRam).to.eql(metricValue.split('\n'));
-            });
-        });
+      log.debug('Aggregation = Percentiles');
+      await PageObjects.visualize.selectAggregation('Percentiles');
+      log.debug('Field =  machine.ram');
+      await PageObjects.visualize.selectField('machine.ram', 'metrics');
+      await PageObjects.visualize.clickGo();
+      await retry.try(async function tryingForTime() {
+        const metricValue = await PageObjects.visualize.getMetric();
+        expect(percentileMachineRam).to.eql(metricValue.split('\n'));
       });
     });
 
-    bdd.it('should show Percentile Ranks', function () {
+    it('should show Percentile Ranks', async function () {
       const percentileRankBytes = [ '2.036%', 'Percentile rank 99 of "memory"'];
-      PageObjects.common.debug('Aggregation = Percentile Ranks');
-      return PageObjects.visualize.selectAggregation('Percentile Ranks')
-      .then(function selectField() {
-        PageObjects.common.debug('Field =  bytes');
-        return PageObjects.visualize.selectField('memory');
-      })
-      .then(function selectField() {
-        PageObjects.common.debug('Values =  99');
-        return PageObjects.visualize.setValue('99');
-      })
-      .then(function clickGo() {
-        return PageObjects.visualize.clickGo();
-      })
-      .then(function () {
-        return PageObjects.common.try(function tryingForTime() {
-          return PageObjects.visualize.getMetric()
-            .then(function (metricValue) {
-              expect(percentileRankBytes).to.eql(metricValue.split('\n'));
-            });
-        });
+      log.debug('Aggregation = Percentile Ranks');
+      await PageObjects.visualize.selectAggregation('Percentile Ranks');
+      log.debug('Field =  bytes');
+      await PageObjects.visualize.selectField('memory', 'metrics');
+      log.debug('Values =  99');
+      await PageObjects.visualize.setValue('99');
+      await PageObjects.visualize.clickGo();
+      await retry.try(async function tryingForTime() {
+        const metricValue = await PageObjects.visualize.getMetric();
+        expect(percentileRankBytes).to.eql(metricValue.split('\n'));
       });
     });
 
   });
-});
+}

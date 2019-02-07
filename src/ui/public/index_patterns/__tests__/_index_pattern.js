@@ -1,61 +1,73 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import _ from 'lodash';
-import sinon from 'auto-release-sinon';
+import sinon from 'sinon';
 import ngMock from 'ng_mock';
 import expect from 'expect.js';
 import Promise from 'bluebird';
-import errors from 'ui/errors';
-import IndexedArray from 'ui/indexed_array';
+import { DuplicateField } from '../../errors';
+import { IndexedArray } from '../../indexed_array';
 import FixturesLogstashFieldsProvider from 'fixtures/logstash_fields';
-import FixturesStubbedDocSourceResponseProvider from 'fixtures/stubbed_doc_source_response';
-import DocSourceProvider from 'ui/courier/data_source/admin_doc_source';
-import UtilsMappingSetupProvider from 'ui/utils/mapping_setup';
-import IndexPatternsIntervalsProvider from 'ui/index_patterns/_intervals';
-import IndexPatternsIndexPatternProvider from 'ui/index_patterns/_index_pattern';
+import { FixturesStubbedSavedObjectIndexPatternProvider } from 'fixtures/stubbed_saved_object_index_pattern';
+import { IndexPatternsIntervalsProvider } from '../_intervals';
+import { IndexPatternProvider } from '../_index_pattern';
 import NoDigestPromises from 'test_utils/no_digest_promises';
-import { stubMapper } from 'test_utils/stub_mapper';
+import { toastNotifications } from '../../notify';
+
+import { FieldsFetcherProvider } from '../fields_fetcher_provider';
+import { StubIndexPatternsApiClientModule } from './stub_index_patterns_api_client';
+import { IndexPatternsApiClientProvider } from '../index_patterns_api_client_provider';
+import { IsUserAwareOfUnsupportedTimePatternProvider } from '../unsupported_time_patterns';
+import { SavedObjectsClientProvider } from '../../saved_objects';
 
 describe('index pattern', function () {
   NoDigestPromises.activateForSuite();
 
   let IndexPattern;
-  let mapper;
-  let mappingSetup;
+  let fieldsFetcher;
   let mockLogstashFields;
-  let DocSource;
-  let config;
-  let docSourceResponse;
+  let savedObjectsClient;
+  let savedObjectsResponse;
   const indexPatternId = 'test-pattern';
   let indexPattern;
-  let calculateIndices;
-  let $rootScope;
   let intervals;
+  let indexPatternsApiClient;
+  let defaultTimeField;
+  let isUserAwareOfUnsupportedTimePattern;
 
-  beforeEach(ngMock.module('kibana'));
-  beforeEach(ngMock.inject(function (Private, $injector, _config_) {
-    $rootScope = $injector.get('$rootScope');
-    config = _config_;
+  beforeEach(ngMock.module('kibana', StubIndexPatternsApiClientModule, (PrivateProvider) => {
+    isUserAwareOfUnsupportedTimePattern = sinon.stub().returns(false);
+    PrivateProvider.swap(IsUserAwareOfUnsupportedTimePatternProvider, () => {
+      return isUserAwareOfUnsupportedTimePattern;
+    });
+  }));
+
+  beforeEach(ngMock.inject(function (Private) {
     mockLogstashFields = Private(FixturesLogstashFieldsProvider);
-    docSourceResponse = Private(FixturesStubbedDocSourceResponseProvider);
+    defaultTimeField = mockLogstashFields.find(f => f.type === 'date');
+    savedObjectsResponse = Private(FixturesStubbedSavedObjectIndexPatternProvider);
 
-    DocSource = Private(DocSourceProvider);
-    sinon.stub(DocSource.prototype, 'doIndex');
-    sinon.stub(DocSource.prototype, 'fetch');
-    mapper = stubMapper(Private, mockLogstashFields);
-
-    // stub mappingSetup
-    mappingSetup = Private(UtilsMappingSetupProvider);
-    sinon.stub(mappingSetup, 'isDefined', function () {
-      return Promise.resolve(true);
-    });
-
-    // stub calculateIndices
-    calculateIndices = sinon.spy(function () {
-      return Promise.resolve([
-        { index: 'foo', max: Infinity, min: -Infinity },
-        { index: 'bar', max: Infinity, min: -Infinity }
-      ]);
-    });
-    Private.stub(require('ui/index_patterns/_calculate_indices'), calculateIndices);
+    savedObjectsClient = Private(SavedObjectsClientProvider);
+    sinon.stub(savedObjectsClient, 'create');
+    sinon.stub(savedObjectsClient, 'get');
+    sinon.stub(savedObjectsClient, 'update');
 
     // spy on intervals
     intervals = Private(IndexPatternsIntervalsProvider);
@@ -64,7 +76,9 @@ describe('index pattern', function () {
       { index: 'bar', max: Infinity, min: -Infinity }
     ]);
 
-    IndexPattern = Private(IndexPatternsIndexPatternProvider);
+    IndexPattern = Private(IndexPatternProvider);
+    fieldsFetcher = Private(FieldsFetcherProvider);
+    indexPatternsApiClient = Private(IndexPatternsApiClientProvider);
   }));
 
   // create an indexPattern instance for each test
@@ -77,14 +91,17 @@ describe('index pattern', function () {
   // helper function to create index patterns
   function create(id, payload) {
     const indexPattern = new IndexPattern(id);
-    DocSource.prototype.doIndex.returns(Promise.resolve(id));
-    payload = _.defaults(payload || {}, docSourceResponse(id));
+    payload = _.defaults(payload || {}, savedObjectsResponse(id));
+
+    savedObjectsClient.create.returns(Promise.resolve(payload));
     setDocsourcePayload(payload);
+
     return indexPattern.init();
   }
 
   function setDocsourcePayload(payload) {
-    DocSource.prototype.fetch.returns(Promise.resolve(payload));
+    savedObjectsClient.get.returns(Promise.resolve(payload));
+    savedObjectsClient.update.returns(Promise.resolve(payload));
   }
 
   describe('api', function () {
@@ -110,7 +127,7 @@ describe('index pattern', function () {
 
   describe('init', function () {
     it('should append the found fields', function () {
-      expect(DocSource.prototype.fetch.callCount).to.be(1);
+      expect(savedObjectsClient.get.callCount).to.be(1);
       expect(indexPattern.fields).to.have.length(mockLogstashFields.length);
       expect(indexPattern.fields).to.be.an(IndexedArray);
     });
@@ -144,82 +161,34 @@ describe('index pattern', function () {
   });
 
   describe('refresh fields', function () {
-    // override the default indexPattern, with a truncated field list
-    const indexPatternId = 'test-pattern';
-    let indexPattern;
-    let fieldLength;
-    let customFields;
+    it('should fetch fields from the fieldsFetcher', async function () {
+      expect(indexPattern.fields.length).to.be.greaterThan(2);
 
-    beforeEach(function () {
-      fieldLength = mockLogstashFields.length;
-      customFields = [{
-        analyzed: true,
-        count: 30,
-        filterable: true,
-        indexed: true,
-        name: 'foo',
-        scripted: false,
-        sortable: true,
-        type: 'number',
-        aggregatable: true,
-        searchable: false
-      },
-      {
-        name: 'script number',
-        type: 'number',
-        scripted: true,
-        script: '1234',
-        lang: 'expression'
-      }];
+      sinon.spy(fieldsFetcher, 'fetch');
+      indexPatternsApiClient.swapStubNonScriptedFields([
+        { name: 'foo' },
+        { name: 'bar' }
+      ]);
 
-      return create(indexPatternId, {
-        _source: {
-          customFormats: '{}',
-          fields: JSON.stringify(customFields)
-        }
-      }).then(function (pattern) {
-        indexPattern = pattern;
-      });
+      await indexPattern.refreshFields();
+      sinon.assert.calledOnce(fieldsFetcher.fetch);
+
+      const newFields = indexPattern.getNonScriptedFields();
+      expect(newFields).to.have.length(2);
+      expect(newFields.map(f => f.name)).to.eql(['foo', 'bar']);
     });
 
-    it('should fetch fields from the doc source', function () {
-      // ensure that we don't have all the fields
-      expect(customFields.length).to.not.equal(mockLogstashFields.length);
-      expect(indexPattern.fields).to.have.length(customFields.length);
-
-      // ensure that all fields will be included in the returned docSource
-      setDocsourcePayload(docSourceResponse(indexPatternId));
-
-      return Promise.all([
-        // read fields from elasticsearch
-        mapper.getFieldsForIndexPattern(),
-
-        // tell the index pattern to do the same
-        indexPattern.refreshFields(),
-      ])
-      .then(function (data) {
-        const expected = data[0]; // just the fields in the index
-        const fields = indexPattern.getNonScriptedFields(); // get all but scripted fields
-
-        expect(_.pluck(fields, 'name')).to.eql(_.pluck(expected, 'name'));
-      });
-    });
-
-    it('should preserve the scripted fields', function () {
-      // ensure that all fields will be included in the returned docSource
-      setDocsourcePayload(docSourceResponse(indexPatternId));
-
+    it('should preserve the scripted fields', async function () {
       // add spy to indexPattern.getScriptedFields
-      const scriptedFieldsSpy = sinon.spy(indexPattern, 'getScriptedFields');
+      sinon.spy(indexPattern, 'getScriptedFields');
 
       // refresh fields, which will fetch
-      return indexPattern.refreshFields().then(function () {
-        // called to append scripted fields to the response from mapper.getFieldsForIndexPattern
-        expect(scriptedFieldsSpy.callCount).to.equal(1);
+      await indexPattern.refreshFields();
 
-        const expected = _.filter(indexPattern.fields, { scripted: true });
-        expect(_.pluck(expected, 'name')).to.eql(['script number']);
-      });
+      // called to append scripted fields to the response from mapper.getFieldsForIndexPattern
+      sinon.assert.calledOnce(indexPattern.getScriptedFields);
+      expect(indexPattern.getScriptedFields().map(f => f.name))
+        .to.eql(mockLogstashFields.filter(f => f.scripted).map(f => f.name));
     });
   });
 
@@ -261,13 +230,13 @@ describe('index pattern', function () {
       expect(function () {
         indexPattern.addScriptedField(scriptedField.name, '\'new script\'', 'string');
       }).to.throwError(function (e) {
-        expect(e).to.be.a(errors.DuplicateField);
+        expect(e).to.be.a(DuplicateField);
       });
     });
   });
 
   describe('popularizeField', function () {
-    it('should increment the poplarity count by default', function () {
+    it('should increment the popularity count by default', function () {
       const saveSpy = sinon.stub(indexPattern, 'save');
       indexPattern.fields.forEach(function (field, i) {
         const oldCount = field.count;
@@ -279,7 +248,7 @@ describe('index pattern', function () {
       });
     });
 
-    it('should increment the poplarity count', function () {
+    it('should increment the popularity count', function () {
       const saveSpy = sinon.stub(indexPattern, 'save');
       indexPattern.fields.forEach(function (field, i) {
         const oldCount = field.count;
@@ -292,8 +261,8 @@ describe('index pattern', function () {
       });
     });
 
-    it('should decrement the poplarity count', function () {
-      indexPattern.fields.forEach(function (field, i) {
+    it('should decrement the popularity count', function () {
+      indexPattern.fields.forEach(function (field) {
         const oldCount = field.count;
         const incrementAmount = 4;
         const decrementAmount = -2;
@@ -315,176 +284,131 @@ describe('index pattern', function () {
   });
 
   describe('#toDetailedIndexList', function () {
-    context('when index pattern is an interval', function () {
+    describe('when index pattern is an interval', function () {
       let interval;
       beforeEach(function () {
         interval = 'result:getInterval';
         sinon.stub(indexPattern, 'getInterval').returns(interval);
+        sinon.stub(indexPattern, 'isTimeBasedInterval').returns(true);
       });
 
       it('invokes interval toDetailedIndexList with given start/stop times', async function () {
         await indexPattern.toDetailedIndexList(1, 2);
-        const id = indexPattern.id;
-        expect(intervals.toIndexList.calledWith(id, interval, 1, 2)).to.be(true);
-      });
-      it('is fulfilled by the result of interval toDetailedIndexList', async function () {
-        const indexList = await indexPattern.toDetailedIndexList();
-        expect(indexList[0].index).to.equal('foo');
-        expect(indexList[1].index).to.equal('bar');
+        sinon.assert.calledWith(intervals.toIndexList, indexPattern.title, interval, 1, 2);
       });
 
-      context('with sort order', function () {
-        it('passes the sort order to the intervals module', function () {
-          return indexPattern.toDetailedIndexList(1, 2, 'SORT_DIRECTION')
-          .then(function () {
-            expect(intervals.toIndexList.callCount).to.be(1);
-            expect(intervals.toIndexList.getCall(0).args[4]).to.be('SORT_DIRECTION');
-          });
+      it('is fulfilled by the result of interval toDetailedIndexList', async function () {
+        const indexList = await indexPattern.toDetailedIndexList();
+        expect(indexList.map(i => i.index)).to.eql(['foo', 'bar']);
+      });
+
+      describe('with sort order', function () {
+        it('passes the sort order to the intervals module', async function () {
+          await indexPattern.toDetailedIndexList(1, 2, 'SORT_DIRECTION');
+          sinon.assert.calledOnce(intervals.toIndexList);
+          expect(intervals.toIndexList.getCall(0).args[4]).to.be('SORT_DIRECTION');
         });
       });
     });
 
-    context('when index pattern is a time-base wildcard', function () {
+    describe('when index pattern is a time-base wildcard', function () {
       beforeEach(function () {
-        sinon.stub(indexPattern, 'getInterval').returns(false);
-        sinon.stub(indexPattern, 'hasTimeField').returns(true);
-        sinon.stub(indexPattern, 'isWildcard').returns(true);
+        indexPattern.id = 'randomID';
+        indexPattern.title = 'logstash-*';
+        indexPattern.timeFieldName = defaultTimeField.name;
+        indexPattern.intervalName = null;
+        indexPattern.notExpandable = true;
       });
 
-      it('invokes calculateIndices with given start/stop times and sortOrder', async function () {
-        await indexPattern.toDetailedIndexList(1, 2, 'sortOrder');
-        const id = indexPattern.id;
-        const field = indexPattern.timeFieldName;
-        expect(calculateIndices.calledWith(id, field, 1, 2, 'sortOrder')).to.be(true);
-      });
-
-      it('is fulfilled by the result of calculateIndices', async function () {
+      it('is fulfilled by title', async function () {
         const indexList = await indexPattern.toDetailedIndexList();
-        expect(indexList[0].index).to.equal('foo');
-        expect(indexList[1].index).to.equal('bar');
+        expect(indexList.map(i => i.index)).to.eql([indexPattern.title]);
       });
     });
 
-    context('when index pattern is a time-base wildcard that is configured not to expand', function () {
+    describe('when index pattern is neither an interval nor a time-based wildcard', function () {
       beforeEach(function () {
-        sinon.stub(indexPattern, 'getInterval').returns(false);
-        sinon.stub(indexPattern, 'hasTimeField').returns(true);
-        sinon.stub(indexPattern, 'isWildcard').returns(true);
-        sinon.stub(indexPattern, 'canExpandIndices').returns(false);
+        indexPattern.id = 'randomID';
+        indexPattern.title = 'logstash-0';
+        indexPattern.timeFieldName = null;
+        indexPattern.intervalName = null;
+        indexPattern.notExpandable = true;
       });
 
-      it('is fulfilled by id', async function () {
+      it('is fulfilled by title', async function () {
         const indexList = await indexPattern.toDetailedIndexList();
-        expect(indexList.index).to.equal(indexPattern.id);
-      });
-    });
-
-    context('when index pattern is neither an interval nor a time-based wildcard', function () {
-      beforeEach(function () {
-        sinon.stub(indexPattern, 'getInterval').returns(false);
-      });
-
-      it('is fulfilled by id', async function () {
-        const indexList = await indexPattern.toDetailedIndexList();
-        expect(indexList.index).to.equal(indexPattern.id);
+        expect(indexList.map(i => i.index)).to.eql([indexPattern.title]);
       });
     });
   });
 
   describe('#toIndexList', function () {
-    context('when index pattern is an interval', function () {
+    describe('when index pattern is an interval', function () {
 
       let interval;
       beforeEach(function () {
-        interval = 'result:getInterval';
-        sinon.stub(indexPattern, 'getInterval').returns(interval);
+        indexPattern.id = 'randomID';
+        indexPattern.title = '[logstash-]YYYY';
+        indexPattern.timeFieldName = defaultTimeField.name;
+        interval = intervals.byName.years;
+        indexPattern.intervalName = interval.name;
+        indexPattern.notExpandable = true;
       });
 
       it('invokes interval toIndexList with given start/stop times', async function () {
         await indexPattern.toIndexList(1, 2);
-        const id = indexPattern.id;
-        expect(intervals.toIndexList.calledWith(id, interval, 1, 2)).to.be(true);
-      });
-      it('is fulfilled by the result of interval toIndexList', async function () {
-        const indexList = await indexPattern.toIndexList();
-        expect(indexList[0]).to.equal('foo');
-        expect(indexList[1]).to.equal('bar');
+        const { title } = indexPattern;
+        sinon.assert.calledWith(intervals.toIndexList, title, interval, 1, 2);
       });
 
-      context('with sort order', function () {
+      it('is fulfilled by the result of interval toIndexList', async function () {
+        const indexList = await indexPattern.toIndexList();
+        expect(indexList).to.equal('foo,bar');
+      });
+
+      describe('with sort order', function () {
         it('passes the sort order to the intervals module', function () {
           return indexPattern.toIndexList(1, 2, 'SORT_DIRECTION')
-          .then(function () {
-            expect(intervals.toIndexList.callCount).to.be(1);
-            expect(intervals.toIndexList.getCall(0).args[4]).to.be('SORT_DIRECTION');
-          });
+            .then(function () {
+              expect(intervals.toIndexList.callCount).to.be(1);
+              expect(intervals.toIndexList.getCall(0).args[4]).to.be('SORT_DIRECTION');
+            });
         });
       });
     });
 
-    context('when index pattern is a time-base wildcard', function () {
+    describe('when index pattern is a time-base wildcard', function () {
       beforeEach(function () {
-        sinon.stub(indexPattern, 'getInterval').returns(false);
-        sinon.stub(indexPattern, 'hasTimeField').returns(true);
-        sinon.stub(indexPattern, 'isWildcard').returns(true);
+        indexPattern.id = 'randomID';
+        indexPattern.title = 'logstash-*';
+        indexPattern.timeFieldName = defaultTimeField.name;
+        indexPattern.intervalName = null;
+        indexPattern.notExpandable = true;
       });
 
-      it('invokes calculateIndices with given start/stop times and sortOrder', async function () {
-        await indexPattern.toIndexList(1, 2, 'sortOrder');
-        const id = indexPattern.id;
-        const field = indexPattern.timeFieldName;
-        expect(calculateIndices.calledWith(id, field, 1, 2, 'sortOrder')).to.be(true);
-      });
-
-      it('is fulfilled by the result of calculateIndices', async function () {
+      it('is fulfilled using the id', async function () {
         const indexList = await indexPattern.toIndexList();
-        expect(indexList[0]).to.equal('foo');
-        expect(indexList[1]).to.equal('bar');
+        expect(indexList).to.eql(indexPattern.title);
       });
     });
 
-    context('when index pattern is a time-base wildcard that is configured not to expand', function () {
+    describe('when index pattern is neither an interval nor a time-based wildcard', function () {
       beforeEach(function () {
-        sinon.stub(indexPattern, 'getInterval').returns(false);
-        sinon.stub(indexPattern, 'hasTimeField').returns(true);
-        sinon.stub(indexPattern, 'isWildcard').returns(true);
-        sinon.stub(indexPattern, 'canExpandIndices').returns(false);
+        indexPattern.id = 'randomID';
+        indexPattern.title = 'logstash-0';
+        indexPattern.timeFieldName = null;
+        indexPattern.intervalName = null;
+        indexPattern.notExpandable = true;
       });
 
       it('is fulfilled by id', async function () {
         const indexList = await indexPattern.toIndexList();
-        expect(indexList).to.equal(indexPattern.id);
-      });
-    });
-
-    context('when index pattern is neither an interval nor a time-based wildcard', function () {
-      beforeEach(function () {
-        sinon.stub(indexPattern, 'getInterval').returns(false);
-      });
-
-      it('is fulfilled by id', async function () {
-        const indexList = await indexPattern.toIndexList();
-        expect(indexList).to.equal(indexPattern.id);
+        expect(indexList).to.eql(indexPattern.title);
       });
     });
   });
 
-  describe('#canExpandIndices()', function () {
-    it('returns true if notExpandable is false', function () {
-      indexPattern.notExpandable = false;
-      expect(indexPattern.canExpandIndices()).to.be(true);
-    });
-    it('returns true if notExpandable is not defined', function () {
-      delete indexPattern.notExpandable;
-      expect(indexPattern.canExpandIndices()).to.be(true);
-    });
-    it('returns false if notExpandable is true', function () {
-      indexPattern.notExpandable = true;
-      expect(indexPattern.canExpandIndices()).to.be(false);
-    });
-  });
-
-  describe('#hasTimeField()', function () {
+  describe('#isTimeBased()', function () {
     beforeEach(function () {
       // for the sake of these tests, it doesn't much matter what type of field
       // this is so long as it exists
@@ -492,25 +416,72 @@ describe('index pattern', function () {
     });
     it('returns false if no time field', function () {
       delete indexPattern.timeFieldName;
-      expect(indexPattern.hasTimeField()).to.be(false);
+      expect(indexPattern.isTimeBased()).to.be(false);
     });
     it('returns false if time field does not actually exist in fields', function () {
       indexPattern.timeFieldName = 'does not exist';
-      expect(indexPattern.hasTimeField()).to.be(false);
+      expect(indexPattern.isTimeBased()).to.be(false);
+    });
+    it('returns true if fields are not loaded yet', () => {
+      indexPattern.fields = null;
+      expect(indexPattern.isTimeBased()).to.be(true);
     });
     it('returns true if valid time field is configured', function () {
-      expect(indexPattern.hasTimeField()).to.be(true);
+      expect(indexPattern.isTimeBased()).to.be(true);
     });
   });
 
   describe('#isWildcard()', function () {
     it('returns true if id has an *', function () {
-      indexPattern.id = 'foo*';
+      indexPattern.title = 'foo*';
       expect(indexPattern.isWildcard()).to.be(true);
     });
     it('returns false if id has no *', function () {
-      indexPattern.id = 'foo';
+      indexPattern.title = 'foo';
       expect(indexPattern.isWildcard()).to.be(false);
+    });
+  });
+
+  describe('#isUnsupportedTimePattern()', () => {
+    it('returns true when intervalName is set', () => {
+      indexPattern.intervalName = 'something';
+      expect(indexPattern.isUnsupportedTimePattern()).to.be(true);
+    });
+    it('returns false otherwise', () => {
+      delete indexPattern.intervalName;
+      expect(indexPattern.isUnsupportedTimePattern()).to.be(false);
+    });
+  });
+
+  describe('unsupported time pattern warning', () => {
+    async function createUnsupportedTimePattern() {
+      return await create('randomID', {
+        attributes: {
+          title: 'pattern-id',
+          timeFieldName: '@timestamp',
+          intervalName: 'days',
+          fields: '[]'
+        }
+      });
+    }
+
+    it('logs a warning when the index pattern source includes `intervalName`', async () => {
+      await createUnsupportedTimePattern();
+      expect(toastNotifications.list).to.have.length(1);
+    });
+
+    it('does not notify if isUserAwareOfUnsupportedTimePattern() returns true', async () => {
+      // Ideally, _index_pattern.js shouldn't be tightly coupled to toastNotifications. Instead, it
+      // should notify its consumer of this state and the consumer should be responsible for
+      // notifying the user. This test verifies the side effect of the state until we can remove
+      // this coupling.
+
+      // Clear existing toasts.
+      toastNotifications.list.splice(0);
+
+      isUserAwareOfUnsupportedTimePattern.returns(true);
+      await createUnsupportedTimePattern();
+      expect(toastNotifications.list).to.have.length(0);
     });
   });
 });

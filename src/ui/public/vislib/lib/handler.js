@@ -1,20 +1,47 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import d3 from 'd3';
 import _ from 'lodash';
-import $ from 'jquery';
-import errors from 'ui/errors';
-import Binder from 'ui/binder';
-import VislibLibLayoutLayoutProvider from './layout/layout';
-import VislibLibChartTitleProvider from './chart_title';
-import VislibLibAlertsProvider from './alerts';
-import VislibAxisProvider from './axis/axis';
-import VislibVisualizationsVisTypesProvider from '../visualizations/vis_types';
+import MarkdownIt from 'markdown-it';
+import { NoResults } from '../../errors';
+import { Binder } from '../../binder';
+import { VislibLibLayoutLayoutProvider } from './layout/layout';
+import { VislibLibChartTitleProvider } from './chart_title';
+import { VislibLibAlertsProvider } from './alerts';
+import { VislibLibAxisProvider } from './axis/axis';
+import { VislibGridProvider } from './chart_grid';
+import { VislibVisualizationsVisTypesProvider } from '../visualizations/vis_types';
+import { dispatchRenderComplete } from '../../render_complete';
 
-export default function HandlerBaseClass(Private) {
+const markdownIt = new MarkdownIt({
+  html: false,
+  linkify: true
+});
+
+export function VisHandlerProvider(Private) {
   const chartTypes = Private(VislibVisualizationsVisTypesProvider);
   const Layout = Private(VislibLibLayoutLayoutProvider);
   const ChartTitle = Private(VislibLibChartTitleProvider);
   const Alerts = Private(VislibLibAlertsProvider);
-  const Axis = Private(VislibAxisProvider);
+  const Axis = Private(VislibLibAxisProvider);
+  const Grid = Private(VislibGridProvider);
 
   /**
    * Handles building all the components of the visualization
@@ -39,6 +66,7 @@ export default function HandlerBaseClass(Private) {
       this.valueAxes = visConfig.get('valueAxes').map(axisArgs => new Axis(visConfig, axisArgs));
       this.chartTitle = new ChartTitle(visConfig);
       this.alerts = new Alerts(this, visConfig.get('alerts'));
+      this.grid = new Grid(this, visConfig.get('grid'));
 
       if (visConfig.get('type') === 'point_series') {
         this.data.stackData(this);
@@ -58,7 +86,8 @@ export default function HandlerBaseClass(Private) {
 
       this.renderArray = this.renderArray
         .concat(this.valueAxes)
-        .concat(this.categoryAxes);
+        // category axes need to render in reverse order https://github.com/elastic/kibana/issues/13551
+        .concat(this.categoryAxes.slice().reverse());
 
       // memoize so that the same function is returned every time,
       // allowing us to remove/re-add the same function
@@ -101,7 +130,7 @@ export default function HandlerBaseClass(Private) {
       const dataType = this.data.type;
 
       if (!dataType) {
-        throw new errors.NoResults();
+        throw new NoResults();
       }
     }
 
@@ -113,6 +142,8 @@ export default function HandlerBaseClass(Private) {
      * @returns {HTMLElement} With the visualization child element
      */
     render() {
+      if (this.visConfig.get('error', null)) return this.error(this.visConfig.get('error'));
+
       const self = this;
       const { binder, charts = [] } = this;
       const selection = d3.select(this.el);
@@ -140,7 +171,7 @@ export default function HandlerBaseClass(Private) {
           loadedCount++;
           if (loadedCount === chartSelection.length) {
             // events from all charts are propagated to vis, we only need to fire renderComplete once they all finish
-            $(self.el).trigger('renderComplete');
+            self.vis.emit('renderComplete');
           }
         });
 
@@ -183,25 +214,15 @@ export default function HandlerBaseClass(Private) {
       this.removeAll(this.el);
 
       const div = d3.select(this.el)
-      .append('div')
-      // class name needs `chart` in it for the polling checkSize function
-      // to continuously call render on resize
-      .attr('class', 'visualize-error chart error');
+        .append('div')
+        // class name needs `chart` in it for the polling checkSize function
+        // to continuously call render on resize
+        .attr('class', 'visError chart error')
+        .attr('data-test-subj', 'visLibVisualizeError');
 
-      if (message === 'No results found') {
-        div.append('div')
-        .attr('class', 'text-center visualize-error visualize-chart ng-scope')
-        .append('div').attr('class', 'item top')
-        .append('div').attr('class', 'item')
-        .append('h2').html('<i class="fa fa-meh-o"></i>')
-        .append('h4').text(message);
+      div.append('h4').text(markdownIt.renderInline(message));
 
-        div.append('div').attr('class', 'item bottom');
-      } else {
-        div.append('h4').text(message);
-      }
-
-      $(this.el).trigger('renderComplete');
+      dispatchRenderComplete(this.el);
       return div;
     }
 

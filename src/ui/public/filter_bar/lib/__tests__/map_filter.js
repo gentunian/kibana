@@ -1,7 +1,25 @@
-import sinon from 'auto-release-sinon';
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import expect from 'expect.js';
 import ngMock from 'ng_mock';
-import FilterBarLibMapFilterProvider from 'ui/filter_bar/lib/map_filter';
+import { FilterBarLibMapFilterProvider } from '../map_filter';
 
 describe('Filter Bar Directive', function () {
   let mapFilter;
@@ -12,7 +30,7 @@ describe('Filter Bar Directive', function () {
     'kibana',
     'kibana/courier',
     function ($provide) {
-      $provide.service('courier', require('fixtures/mock_courier'));
+      $provide.service('indexPatterns', require('fixtures/mock_index_patterns'));
     }
   ));
 
@@ -39,8 +57,8 @@ describe('Filter Bar Directive', function () {
       const before = { meta: { index: 'logstash-*' }, exists: { field: '@timestamp' } };
       mapFilter(before).then(function (after) {
         expect(after).to.have.property('meta');
-        expect(after.meta).to.have.property('key', 'exists');
-        expect(after.meta).to.have.property('value', '@timestamp');
+        expect(after.meta).to.have.property('key', '@timestamp');
+        expect(after.meta).to.have.property('value', 'exists');
         expect(after.meta).to.have.property('disabled', false);
         expect(after.meta).to.have.property('negate', false);
         done();
@@ -52,8 +70,8 @@ describe('Filter Bar Directive', function () {
       const before = { meta: { index: 'logstash-*' }, missing: { field: '@timestamp' } };
       mapFilter(before).then(function (after) {
         expect(after).to.have.property('meta');
-        expect(after.meta).to.have.property('key', 'missing');
-        expect(after.meta).to.have.property('value', '@timestamp');
+        expect(after.meta).to.have.property('key', '@timestamp');
+        expect(after.meta).to.have.property('value', 'missing');
         expect(after.meta).to.have.property('disabled', false);
         expect(after.meta).to.have.property('negate', false);
         done();

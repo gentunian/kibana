@@ -1,6 +1,26 @@
-import VislibLibLayoutSplitsPieChartChartSplitProvider from '../splits/pie_chart/chart_split';
-import VislibLibLayoutSplitsPieChartChartTitleSplitProvider from '../splits/pie_chart/chart_title_split';
-export default function ColumnLayoutFactory(Private) {
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+import { VislibLibLayoutSplitsPieChartChartSplitProvider } from '../splits/pie_chart/chart_split';
+import { VislibLibLayoutSplitsPieChartChartTitleSplitProvider } from '../splits/pie_chart/chart_title_split';
+
+export function VislibLibLayoutTypesPieLayoutProvider(Private) {
   const chartSplit = Private(VislibLibLayoutSplitsPieChartChartSplitProvider);
   const chartTitleSplit = Private(VislibLibLayoutSplitsPieChartChartTitleSplitProvider);
 
@@ -30,26 +50,26 @@ export default function ColumnLayoutFactory(Private) {
       {
         parent: el,
         type: 'div',
-        class: 'vis-wrapper',
+        class: 'visWrapper',
         datum: data,
         children: [
           {
             type: 'div',
-            class: 'y-axis-chart-title',
+            class: 'visAxis__splitTitles--y',
             splits: chartTitleSplit
           },
           {
             type: 'div',
-            class: 'vis-col-wrapper',
+            class: 'visWrapper__column',
             children: [
               {
                 type: 'div',
-                class: 'chart-wrapper',
+                class: 'visWrapper__chart',
                 splits: chartSplit
               },
               {
                 type: 'div',
-                class: 'x-axis-chart-title',
+                class: 'visAxis__splitTitles--x',
                 splits: chartTitleSplit
               }
             ]

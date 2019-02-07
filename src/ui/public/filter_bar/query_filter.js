@@ -1,15 +1,36 @@
-import _ from 'lodash';
-import onlyDisabled from 'ui/filter_bar/lib/only_disabled';
-import onlyStateChanged from 'ui/filter_bar/lib/only_state_changed';
-import uniqFilters from 'ui/filter_bar/lib/uniq_filters';
-import compareFilters from 'ui/filter_bar/lib/compare_filters';
-import angular from 'angular';
-import EventsProvider from 'ui/events';
-import FilterBarLibMapAndFlattenFiltersProvider from 'ui/filter_bar/lib/map_and_flatten_filters';
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
 
-export default function (Private, $rootScope, getAppState, globalState, config) {
+import _ from 'lodash';
+import { onlyDisabled } from './lib/only_disabled';
+import { onlyStateChanged } from './lib/only_state_changed';
+import { uniqFilters } from './lib/uniq_filters';
+import { compareFilters } from './lib/compare_filters';
+import { EventsProvider } from '../events';
+import { FilterBarLibMapAndFlattenFiltersProvider } from './lib/map_and_flatten_filters';
+import { FilterBarLibExtractTimeFilterProvider } from './lib/extract_time_filter';
+import { changeTimeFilter } from './lib/change_time_filter';
+
+export function FilterBarQueryFilterProvider(Private, $rootScope, getAppState, globalState, config) {
   const EventEmitter = Private(EventsProvider);
   const mapAndFlattenFilters = Private(FilterBarLibMapAndFlattenFiltersProvider);
+  const extractTimeFilter = Private(FilterBarLibExtractTimeFilterProvider);
 
   const queryFilter = new EventEmitter();
 
@@ -60,18 +81,18 @@ export default function (Private, $rootScope, getAppState, globalState, config) 
     const appState = getAppState();
     const filterState = (global) ? globalState : appState;
 
-    if (!_.isArray(filters)) {
+    if (!Array.isArray(filters)) {
       filters = [filters];
     }
 
     return mapAndFlattenFilters(filters)
-    .then(function (filters) {
-      if (!filterState.filters) {
-        filterState.filters = [];
-      }
+      .then(function (filters) {
+        if (!filterState.filters) {
+          filterState.filters = [];
+        }
 
-      filterState.filters = filterState.filters.concat(filters);
-    });
+        filterState.filters = filterState.filters.concat(filters);
+      });
   };
 
   /**
@@ -98,26 +119,6 @@ export default function (Private, $rootScope, getAppState, globalState, config) 
     }
 
     state.filters.splice(index, 1);
-  };
-
-  /**
-  * Updates an existing filter
-  * @param {object} filter Contains a reference to a filter and its new model
-  * @param {object} filter.source The filter reference
-  * @param {string} filter.model The edited filter
-  * @returns {object} Promise that resolves to the new filter on a successful merge
-  */
-  queryFilter.updateFilter = function (filter) {
-    const mergedFilter = _.assign({}, filter.source, filter.model);
-    mergedFilter.meta.alias = filter.alias;
-    //If the filter type is changed we want to discard the old type
-    //when merging changes back in
-    const filterTypeReplaced = filter.model[filter.type] !== mergedFilter[filter.type];
-    if (filterTypeReplaced) {
-      delete mergedFilter[filter.type];
-    }
-
-    return angular.copy(mergedFilter, filter.source);
   };
 
   /**
@@ -156,7 +157,7 @@ export default function (Private, $rootScope, getAppState, globalState, config) 
 
 
   /**
-   * Inverts the nagate value on the filter
+   * Inverts the negate value on the filter
    * @param {object} filter The filter to toggle
    * @returns {object} updated filter
    */
@@ -186,16 +187,16 @@ export default function (Private, $rootScope, getAppState, globalState, config) 
     if (!appState) return filter;
 
     // ensure that both states have a filters property
-    if (!_.isArray(globalState.filters)) globalState.filters = [];
-    if (!_.isArray(appState.filters)) appState.filters = [];
+    if (!Array.isArray(globalState.filters)) globalState.filters = [];
+    if (!Array.isArray(appState.filters)) appState.filters = [];
 
-    const appIndex = _.indexOf(appState.filters, filter);
+    const appIndex = _.findIndex(appState.filters, appFilter => _.isEqual(appFilter, filter));
 
     if (appIndex !== -1 && force !== false) {
       appState.filters.splice(appIndex, 1);
       globalState.filters.push(filter);
     } else {
-      const globalIndex = _.indexOf(globalState.filters, filter);
+      const globalIndex = _.findIndex(globalState.filters, globalFilter => _.isEqual(globalFilter, filter));
 
       if (globalIndex === -1 || force === true) return filter;
 
@@ -216,6 +217,24 @@ export default function (Private, $rootScope, getAppState, globalState, config) 
     }
 
     executeOnFilters(pin);
+  };
+
+  queryFilter.setFilters = filters => {
+    return mapAndFlattenFilters(filters)
+      .then(mappedFilters => {
+        const appState = getAppState();
+        const [globalFilters, appFilters] = _.partition(mappedFilters, filter => {
+          return filter.$state.store === 'globalState';
+        });
+        globalState.filters = globalFilters;
+        if (appState) appState.filters = appFilters;
+      });
+  };
+
+  queryFilter.addFiltersAndChangeTimeFilter = async filters => {
+    const timeFilter = await extractTimeFilter(filters);
+    if (timeFilter) changeTimeFilter(timeFilter);
+    queryFilter.addFilters(filters.filter(filter => filter !== timeFilter));
   };
 
   initWatchers();
@@ -270,7 +289,6 @@ export default function (Private, $rootScope, getAppState, globalState, config) 
     // ensure we don't mutate the filters passed in
     const globalFilters = gFilters ? _.cloneDeep(gFilters) : [];
     const appFilters = aFilters ? _.cloneDeep(aFilters) : [];
-    compareOptions = _.defaults(compareOptions || {}, { disabled: true });
 
     // existing globalFilters should be mutated by appFilters
     _.each(appFilters, function (filter, i) {
@@ -286,9 +304,17 @@ export default function (Private, $rootScope, getAppState, globalState, config) 
       appFilters.splice(i, 1);
     });
 
+    // Reverse the order of globalFilters and appFilters, since uniqFilters
+    // will throw out duplicates from the back of the array, but we want
+    // newer filters to overwrite previously created filters.
+    globalFilters.reverse();
+    appFilters.reverse();
+
     return [
-      uniqFilters(globalFilters, { disabled: true }),
-      uniqFilters(appFilters, { disabled: true })
+      // Reverse filters after uniq again, so they are still in the order, they
+      // were before updating them
+      uniqFilters(globalFilters).reverse(),
+      uniqFilters(appFilters).reverse()
     ];
   }
 
@@ -326,8 +352,7 @@ export default function (Private, $rootScope, getAppState, globalState, config) 
 
         // reconcile filter in global and app states
         const filters = mergeStateFilters(next[0], next[1]);
-        const globalFilters = filters[0];
-        const appFilters = filters[1];
+        const [globalFilters, appFilters] = filters;
         const appState = getAppState();
 
         // save the state, as it may have updated
@@ -348,10 +373,10 @@ export default function (Private, $rootScope, getAppState, globalState, config) 
         // save states and emit the required events
         saveState();
         queryFilter.emit('update')
-        .then(function () {
-          if (!doFetch) return;
-          queryFilter.emit('fetch');
-        });
+          .then(function () {
+            if (!doFetch) return;
+            queryFilter.emit('fetch');
+          });
 
         // iterate over each state type, checking for changes
         function getActions() {

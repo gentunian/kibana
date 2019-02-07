@@ -1,5 +1,23 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import d3 from 'd3';
-import angular from 'angular';
 import ngMock from 'ng_mock';
 import expect from 'expect.js';
 
@@ -9,10 +27,10 @@ import columns from 'fixtures/vislib/mock_data/date_histogram/_columns';
 import rows from 'fixtures/vislib/mock_data/date_histogram/_rows';
 import stackedSeries from 'fixtures/vislib/mock_data/date_histogram/_stacked_series';
 import $ from 'jquery';
-import VislibLibLayoutLayoutProvider from 'ui/vislib/lib/layout/layout';
+import { VislibLibLayoutLayoutProvider } from '../../../lib/layout/layout';
 import FixturesVislibVisFixtureProvider from 'fixtures/vislib/_vis_fixture';
-import 'ui/persisted_state';
-import VislibVisConfig from 'ui/vislib/lib/vis_config';
+import '../../../../persisted_state';
+import { VislibVisConfigProvider } from '../../../lib/vis_config';
 
 const dateHistogramArray = [
   series,
@@ -43,7 +61,7 @@ dateHistogramArray.forEach(function (data, i) {
         Layout = Private(VislibLibLayoutLayoutProvider);
         vis = Private(FixturesVislibVisFixtureProvider)();
         persistedState = new ($injector.get('PersistedState'))();
-        VisConfig = Private(VislibVisConfig);
+        VisConfig = Private(VislibVisConfigProvider);
         vis.render(data, persistedState);
         numberOfCharts = vis.handler.charts.length;
       });
@@ -55,17 +73,17 @@ dateHistogramArray.forEach(function (data, i) {
 
     describe('createLayout Method', function () {
       it('should append all the divs', function () {
-        expect($(vis.el).find('.vis-wrapper').length).to.be(1);
-        expect($(vis.el).find('.y-axis-col-wrapper').length).to.be(2);
-        expect($(vis.el).find('.vis-col-wrapper').length).to.be(1);
-        expect($(vis.el).find('.y-axis-col').length).to.be(2);
-        expect($(vis.el).find('.y-axis-title').length).to.be(2);
-        expect($(vis.el).find('.y-axis-div-wrapper').length).to.be(2);
-        expect($(vis.el).find('.y-axis-spacer-block').length).to.be(4);
-        expect($(vis.el).find('.chart-wrapper').length).to.be(numberOfCharts);
-        expect($(vis.el).find('.x-axis-wrapper').length).to.be(2);
-        expect($(vis.el).find('.x-axis-div-wrapper').length).to.be(2);
-        expect($(vis.el).find('.x-axis-title').length).to.be(2);
+        expect($(vis.el).find('.visWrapper').length).to.be(1);
+        expect($(vis.el).find('.visAxis--y').length).to.be(2);
+        expect($(vis.el).find('.visWrapper__column').length).to.be(1);
+        expect($(vis.el).find('.visAxis__column--y').length).to.be(2);
+        expect($(vis.el).find('.y-axis-title').length).to.be.above(0);
+        expect($(vis.el).find('.visAxis__splitAxes--y').length).to.be(2);
+        expect($(vis.el).find('.visAxis__spacer--y').length).to.be(4);
+        expect($(vis.el).find('.visWrapper__chart').length).to.be(numberOfCharts);
+        expect($(vis.el).find('.visAxis--x').length).to.be(2);
+        expect($(vis.el).find('.visAxis__splitAxes--x').length).to.be(2);
+        expect($(vis.el).find('.x-axis-title').length).to.be.above(0);
       });
     });
 
@@ -129,7 +147,7 @@ dateHistogramArray.forEach(function (data, i) {
     describe('appendElem Method', function () {
       beforeEach(function () {
         vis.handler.layout.appendElem(vis.el, 'svg', 'column');
-        vis.handler.layout.appendElem('.visualize-chart', 'div', 'test');
+        vis.handler.layout.appendElem('.visChart', 'div', 'test');
       });
 
       it('should append DOM element to el with a class name', function () {

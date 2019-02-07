@@ -1,13 +1,28 @@
-import angular from 'angular';
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import _ from 'lodash';
 import ngMock from 'ng_mock';
 import expect from 'expect.js';
 
-import dataSeries from 'fixtures/vislib/mock_data/date_histogram/_series';
-import dataSeriesNeg from 'fixtures/vislib/mock_data/date_histogram/_series_neg';
-import dataStacked from 'fixtures/vislib/mock_data/stacked/_stacked';
-import VislibLibDataProvider from 'ui/vislib/lib/data';
-import 'ui/persisted_state';
+import { VislibLibDataProvider } from '../../lib/data';
+import '../../../persisted_state';
 
 const seriesData = {
   'label': '',
@@ -147,19 +162,11 @@ describe('Vislib Data Class Test Suite', function () {
 
   describe('Data.flatten', function () {
     let serIn;
-    let rowIn;
-    let colIn;
     let serOut;
-    let rowOut;
-    let colOut;
 
     beforeEach(function () {
       serIn = new Data(seriesData, persistedState);
-      rowIn = new Data(rowsData, persistedState);
-      colIn = new Data(colsData, persistedState);
       serOut = serIn.flatten();
-      rowOut = rowIn.flatten();
-      colOut = colIn.flatten();
     });
 
     it('should return an array of value objects from every series', function () {
@@ -167,8 +174,8 @@ describe('Vislib Data Class Test Suite', function () {
     });
 
     it('should return all points from every series', testLength(seriesData));
-    it('should return all points from every series', testLength(rowsData));
-    it('should return all points from every series', testLength(colsData));
+    it('should return all points from every series in the rows', testLength(rowsData));
+    it('should return all points from every series in the columns', testLength(colsData));
 
     function testLength(inputData) {
       return function () {
@@ -230,7 +237,7 @@ describe('Vislib Data Class Test Suite', function () {
     describe('getVisData', function () {
       it('should return the rows property', function () {
         const visData = data.getVisData();
-        expect(visData).to.eql(geohashGridData.rows);
+        expect(visData[0].title).to.eql(geohashGridData.rows[0].title);
       });
     });
 

@@ -1,7 +1,25 @@
-import _ from 'lodash';
-import errors from 'ui/errors';
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
 
-export default function PointSeriesProvider(Private) {
+import _ from 'lodash';
+
+export function VislibVisualizationsPointSeriesProvider() {
 
   class PointSeries {
     constructor(handler, seriesEl, seriesData, seriesConfig) {
@@ -10,27 +28,12 @@ export default function PointSeriesProvider(Private) {
       this.chartEl = seriesEl;
       this.chartData = seriesData;
       this.seriesConfig = seriesConfig;
-
-      this.validateDataCompliesWithScalingMethod(this.chartData);
-    }
-
-    validateDataCompliesWithScalingMethod(data) {
-      const invalidLogScale = data.values && data.values.some(d => d.y < 1);
-      if (this.getValueAxis().axisConfig.isLogScale() && invalidLogScale) {
-        throw new errors.InvalidLogScaleValues();
-      }
-    }
-
-    getStackedCount() {
-      return this.baseChart.chartConfig.series.reduce(function (sum, series) {
-        return series.mode === 'stacked' ? sum + 1 : sum;
-      }, 0);
     }
 
     getGroupedCount() {
       const stacks = [];
-      return this.baseChart.chartConfig.series.reduce(function (sum, series) {
-        const valueAxis = series.valueAxis;
+      return this.baseChart.chartConfig.series.reduce((sum, series) => {
+        const valueAxis = series.valueAxis || this.baseChart.handler.valueAxes[0].id;
         const isStacked = series.mode === 'stacked';
         const isHistogram = series.type === 'histogram';
         if (!isHistogram) return sum;
@@ -40,20 +43,11 @@ export default function PointSeriesProvider(Private) {
       }, 0);
     }
 
-    getStackedNum(data) {
-      let i = 0;
-      for (const seri of this.baseChart.chartConfig.series) {
-        if (seri.data === data) return i;
-        if (seri.mode === 'stacked') i++;
-      }
-      return 0;
-    }
-
     getGroupedNum(data) {
       let i = 0;
       const stacks = [];
       for (const seri of this.baseChart.chartConfig.series) {
-        const valueAxis = seri.valueAxis;
+        const valueAxis = seri.valueAxis || this.baseChart.handler.valueAxes[0].id;
         const isStacked = seri.mode === 'stacked';
         if (!isStacked) {
           if (seri.data === data) return i;
@@ -87,17 +81,6 @@ export default function PointSeriesProvider(Private) {
       }
       const click = events.addClickEvent();
       return element.call(click);
-    }
-
-    checkIfEnoughData() {
-      const message = 'Area charts require more than one data point. Try adding ' +
-        'an X-Axis Aggregation';
-
-      const notEnoughData = this.chartData.values.length < 2;
-
-      if (notEnoughData) {
-        throw new errors.NotEnoughData(message);
-      }
     }
   }
 

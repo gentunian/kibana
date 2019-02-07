@@ -1,32 +1,61 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import expect from 'expect.js';
 
-import {
-  bdd
-} from '../../../support';
+export default function ({ getService, getPageObjects }) {
+  const log = getService('log');
+  const PageObjects = getPageObjects(['common', 'visualize']);
 
-import PageObjects from '../../../support/page_objects';
+  describe('chart types', function () {
+    before(function () {
+      log.debug('navigateToApp visualize');
+      return PageObjects.common.navigateToUrl('visualize', 'new');
+    });
 
-bdd.describe('visualize app', function describeIndexTests() {
-
-  bdd.before(function () {
-    PageObjects.common.debug('navigateToApp visualize');
-    return PageObjects.common.navigateToUrl('visualize', 'new');
-  });
-
-  bdd.describe('chart types', function indexPatternCreation() {
-    bdd.it('should show the correct chart types', function () {
+    it('should show the correct chart types', async function () {
       const expectedChartTypes = [
-        'Area chart', 'Data table', 'Heatmap chart', 'Line chart', 'Markdown widget',
-        'Metric', 'Pie chart', 'Tag cloud', 'Tile map', 'Timeseries', 'Vertical bar chart'
+        'Area',
+        'Controls',
+        'Coordinate Map',
+        'Data Table',
+        'Gauge',
+        'Goal',
+        'Heat Map',
+        'Horizontal Bar',
+        'Line',
+        'Markdown',
+        'Metric',
+        'Pie',
+        'Region Map',
+        'Tag Cloud',
+        'Timelion',
+        'Vega',
+        'Vertical Bar',
+        'Visual Builder',
       ];
+
       // find all the chart types and make sure there all there
-      return PageObjects.visualize.getChartTypes()
-        .then(function testChartTypes(chartTypes) {
-          PageObjects.common.debug('returned chart types = ' + chartTypes);
-          PageObjects.common.debug('expected chart types = ' + expectedChartTypes);
-          PageObjects.common.saveScreenshot('Visualize-chart-types');
-          expect(chartTypes).to.eql(expectedChartTypes);
-        });
+      const chartTypes = await PageObjects.visualize.getChartTypes();
+      log.debug('returned chart types = ' + chartTypes);
+      log.debug('expected chart types = ' + expectedChartTypes);
+      expect(chartTypes).to.eql(expectedChartTypes);
     });
   });
-});
+}

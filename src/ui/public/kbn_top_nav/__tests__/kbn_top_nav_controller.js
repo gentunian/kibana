@@ -1,8 +1,27 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import ngMock from 'ng_mock';
 import expect from 'expect.js';
 import { pluck } from 'lodash';
 import sinon from 'sinon';
-import KbnTopNavControllerProvider from '../kbn_top_nav_controller';
+import { KbnTopNavControllerProvider } from '../kbn_top_nav_controller';
 
 describe('KbnTopNavController', function () {
   let KbnTopNavController;
@@ -14,17 +33,17 @@ describe('KbnTopNavController', function () {
 
   describe('opts', function () {
     it('supports giving it no options', function () {
-      const controller = new KbnTopNavController();
+      new KbnTopNavController();
     });
 
     it('support empty options list', function () {
-      const controller = new KbnTopNavController([]);
+      new KbnTopNavController([]);
     });
 
     describe('key:', function () {
       it('requires every opt to have a key', function () {
         expect(function () {
-          const controller = new KbnTopNavController([
+          new KbnTopNavController([
             { foo: 'bar' }
           ]);
         }).to.throwError(TypeError);
@@ -48,7 +67,7 @@ describe('KbnTopNavController', function () {
     });
 
     describe('description:', function () {
-      it('defaults to "Toggle ${key} view" when using templates', function () {
+      it('defaults to "Toggle ${label} view" when using templates', function () {
         const controller = new KbnTopNavController([
           { key: 'foo', template: '<h1></h1>' },
           { key: 'Bar', description: 'not the default' },
@@ -56,7 +75,7 @@ describe('KbnTopNavController', function () {
         ]);
 
         expect(pluck(controller.opts, 'description')).to.eql([
-          'Toggle foo view',
+          'Toggle Foo view',
           'not the default',
           '1234',
         ]);

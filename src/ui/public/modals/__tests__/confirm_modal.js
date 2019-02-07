@@ -1,3 +1,22 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import angular from 'angular';
 import expect from 'expect.js';
 import ngMock from 'ng_mock';
@@ -47,7 +66,7 @@ describe('ui/modals/confirm_modal', function () {
     confirmModal(myMessage, { confirmButtonText: 'GREAT!', onConfirm: _.noop });
 
     $rootScope.$digest();
-    const message = findByDataTestSubj('confirmModalBodyText')[0].innerText;
+    const message = findByDataTestSubj('confirmModalBodyText')[0].innerText.trim();
     expect(message).to.equal(myMessage);
   });
 
@@ -62,125 +81,57 @@ describe('ui/modals/confirm_modal', function () {
     it('for confirm button', () => {
       confirmModal('What\'s your favorite dinosaur?', confirmModalOptions);
       $rootScope.$digest();
-      const confirmButtonText = findByDataTestSubj('confirmModalConfirmButton')[0].innerText;
+      const confirmButtonText = findByDataTestSubj('confirmModalConfirmButton')[0].innerText.trim();
       expect(confirmButtonText).to.equal('Troodon');
     });
 
     it('for cancel button', () => {
       confirmModal('What\'s your favorite dinosaur?', confirmModalOptions);
       $rootScope.$digest();
-      const cancelButtonText = findByDataTestSubj('confirmModalCancelButton')[0].innerText;
+      const cancelButtonText = findByDataTestSubj('confirmModalCancelButton')[0].innerText.trim();
       expect(cancelButtonText).to.equal('Dilophosaurus');
     });
 
     it('for title text', () => {
       confirmModal('What\'s your favorite dinosaur?', confirmModalOptions);
       $rootScope.$digest();
-      const titleText = findByDataTestSubj('confirmModalTitleText')[0].innerText;
+      const titleText = findByDataTestSubj('confirmModalTitleText')[0].innerText.trim();
       expect(titleText).to.equal('Dinosaurs');
-    });
-  });
-
-  describe('x icon', function () {
-    it('is visible when showClose is true', function () {
-      const confirmModalOptions = {
-        confirmButtonText: 'bye',
-        onConfirm: _.noop,
-        showClose: true,
-        title: 'hi'
-      };
-      confirmModal('hi', confirmModalOptions);
-
-      $rootScope.$digest();
-      const xIcon = findByDataTestSubj('confirmModalCloseButton');
-      expect(xIcon.length).to.be(1);
-    });
-
-    it('is not visible when showClose is false', function () {
-      const confirmModalOptions = {
-        confirmButtonText: 'bye',
-        onConfirm: _.noop,
-        title: 'hi',
-        showClose: false
-      };
-      confirmModal('hi', confirmModalOptions);
-
-      $rootScope.$digest();
-      const xIcon = findByDataTestSubj('confirmModalCloseButton');
-      expect(xIcon.length).to.be(0);
     });
   });
 
   describe('callbacks are called:', function () {
     const confirmCallback = sinon.spy();
-    const closeCallback = sinon.spy();
     const cancelCallback = sinon.spy();
 
     const confirmModalOptions = {
       confirmButtonText: 'bye',
       onConfirm: confirmCallback,
       onCancel: cancelCallback,
-      onClose: closeCallback,
-      title: 'hi',
-      showClose: true
+      title: 'hi'
     };
 
-    function resetSpyCounts() {
-      confirmCallback.reset();
-      closeCallback.reset();
-      cancelCallback.reset();
-    }
-
-    it('onClose', function () {
-      resetSpyCounts();
-      confirmModal('hi', confirmModalOptions);
-      $rootScope.$digest();
-      findByDataTestSubj('confirmModalCloseButton').click();
-
-      expect(closeCallback.called).to.be(true);
-      expect(confirmCallback.called).to.be(false);
-      expect(cancelCallback.called).to.be(false);
+    beforeEach(() => {
+      confirmCallback.resetHistory();
+      cancelCallback.resetHistory();
     });
 
     it('onCancel', function () {
-      resetSpyCounts();
       confirmModal('hi', confirmModalOptions);
       $rootScope.$digest();
       findByDataTestSubj('confirmModalCancelButton').click();
 
-      expect(closeCallback.called).to.be(false);
       expect(confirmCallback.called).to.be(false);
       expect(cancelCallback.called).to.be(true);
     });
 
     it('onConfirm', function () {
-      resetSpyCounts();
       confirmModal('hi', confirmModalOptions);
       $rootScope.$digest();
       findByDataTestSubj('confirmModalConfirmButton').click();
 
-      expect(closeCallback.called).to.be(false);
       expect(confirmCallback.called).to.be(true);
       expect(cancelCallback.called).to.be(false);
-    });
-
-
-    it('onClose defaults to onCancel if not specified', function () {
-      resetSpyCounts();
-      const confirmModalOptions = {
-        confirmButtonText: 'bye',
-        onConfirm: confirmCallback,
-        onCancel: cancelCallback,
-        title: 'hi',
-        showClose: true
-      };
-
-      confirmModal('hi', confirmModalOptions);
-      $rootScope.$digest();
-      findByDataTestSubj('confirmModalCloseButton').click();
-
-      expect(confirmCallback.called).to.be(false);
-      expect(cancelCallback.called).to.be(true);
     });
   });
 });

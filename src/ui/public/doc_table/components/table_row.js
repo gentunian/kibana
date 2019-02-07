@@ -1,15 +1,35 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import _ from 'lodash';
 import $ from 'jquery';
-import 'ui/highlight';
-import 'ui/highlight/highlight_tags';
-import 'ui/doc_viewer';
-import 'ui/filters/trust_as_html';
-import 'ui/filters/short_dots';
-import noWhiteSpace from 'ui/utils/no_white_space';
-import openRowHtml from 'ui/doc_table/components/table_row/open.html';
-import detailsHtml from 'ui/doc_table/components/table_row/details.html';
-import uiModules from 'ui/modules';
-import FilterManagerProvider from 'ui/filter_manager';
+import rison from 'rison-node';
+import '../../doc_viewer';
+import '../../filters/trust_as_html';
+import '../../filters/short_dots';
+import { noWhiteSpace } from '../../../../legacy/core_plugins/kibana/common/utils/no_white_space';
+import openRowHtml from './table_row/open.html';
+import detailsHtml from './table_row/details.html';
+import { uiModules } from '../../modules';
+import { disableFilter } from '@kbn/es-query';
+import { dispatchRenderComplete } from '../../render_complete';
+
 const module = uiModules.get('app/discover');
 
 
@@ -25,21 +45,23 @@ const MIN_LINE_LENGTH = 20;
  * <tr ng-repeat="row in rows" kbn-table-row="row"></tr>
  * ```
  */
-module.directive('kbnTableRow', ['$compile', 'Private', function ($compile, Private) {
+module.directive('kbnTableRow', function ($compile, $httpParamSerializer, kbnUrl, config) {
   const cellTemplate = _.template(noWhiteSpace(require('ui/doc_table/components/table_row/cell.html')));
   const truncateByHeightTemplate = _.template(noWhiteSpace(require('ui/partials/truncate_by_height.html')));
-  const filterManager = Private(FilterManagerProvider);
 
   return {
     restrict: 'A',
     scope: {
       columns: '=',
       filter: '=',
+      filters: '=?',
       indexPattern: '=',
-      row: '=kbnTableRow'
+      row: '=kbnTableRow',
+      onAddColumn: '=?',
+      onRemoveColumn: '=?',
     },
     link: function ($scope, $el) {
-      $el.after('<tr>');
+      $el.after('<tr data-test-subj="docTableDetailsRow" class="kbnDocTableDetails__row">');
       $el.empty();
 
       // when we compile the details, we use this $scope
@@ -88,8 +110,22 @@ module.directive('kbnTableRow', ['$compile', 'Private', function ($compile, Priv
       $scope.inlineFilter = function inlineFilter($event, type) {
         const column = $($event.target).data().column;
         const field = $scope.indexPattern.fields.byName[column];
-        $scope.indexPattern.popularizeField(field, 1);
-        filterManager.add(field, $scope.flattenedRow[column], type, $scope.indexPattern.id);
+        $scope.filter(field, $scope.flattenedRow[column], type);
+      };
+
+      $scope.getContextAppHref = () => {
+        const path = kbnUrl.eval('#/context/{{ indexPattern }}/{{ anchorType }}/{{ anchorId }}', {
+          anchorId: $scope.row._id,
+          anchorType: $scope.row._type,
+          indexPattern: $scope.indexPattern.id,
+        });
+        const hash = $httpParamSerializer({
+          _a: rison.encode({
+            columns: $scope.columns,
+            filters: ($scope.filters || []).map(disableFilter),
+          }),
+        });
+        return `${path}?${hash}`;
       };
 
       // create a tr element that lists the value for each *column*
@@ -103,11 +139,15 @@ module.directive('kbnTableRow', ['$compile', 'Private', function ($compile, Priv
         ];
 
         const mapping = indexPattern.fields.byName;
-        if (indexPattern.timeFieldName) {
+        const hideTimeColumn = config.get('doc_table:hideTimeColumn');
+        if (indexPattern.timeFieldName && !hideTimeColumn) {
           newHtmls.push(cellTemplate({
             timefield: true,
             formatted: _displayField(row, indexPattern.timeFieldName),
-            filterable: mapping[indexPattern.timeFieldName].filterable,
+            filterable: (
+              mapping[indexPattern.timeFieldName].filterable
+              && _.isFunction($scope.filter)
+            ),
             column: indexPattern.timeFieldName
           }));
         }
@@ -115,7 +155,8 @@ module.directive('kbnTableRow', ['$compile', 'Private', function ($compile, Priv
         $scope.columns.forEach(function (column) {
           const isFilterable = $scope.flattenedRow[column] !== undefined
             && mapping[column]
-            && mapping[column].filterable;
+            && mapping[column].filterable
+            && _.isFunction($scope.filter);
 
           newHtmls.push(cellTemplate({
             timefield: false,
@@ -138,7 +179,7 @@ module.directive('kbnTableRow', ['$compile', 'Private', function ($compile, Priv
           const $target = reuse ? $(reuse).detach() : $(html);
           $target.data('discover:html', html);
           const $before = $cells.eq(i - 1);
-          if ($before.size()) {
+          if ($before.length) {
             $before.after($target);
           } else {
             $el.append($target);
@@ -159,7 +200,7 @@ module.directive('kbnTableRow', ['$compile', 'Private', function ($compile, Priv
 
         // trim off cells that were not used rest of the cells
         $cells.filter(':gt(' + (newHtmls.length - 1) + ')').remove();
-        $el.trigger('renderComplete');
+        dispatchRenderComplete($el[0]);
       }
 
       /**
@@ -179,4 +220,4 @@ module.directive('kbnTableRow', ['$compile', 'Private', function ($compile, Priv
       }
     }
   };
-}]);
+});

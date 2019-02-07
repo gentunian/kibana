@@ -1,17 +1,32 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import _ from 'lodash';
 import d3 from 'd3';
-import Binder from 'ui/binder';
-import errors from 'ui/errors';
-import EventsProvider from 'ui/events';
-import './styles/main.less';
-import VislibLibResizeCheckerProvider from './lib/resize_checker';
-import VisConifgProvider from './lib/vis_config';
-import VisHandlerProvider from './lib/handler';
+import { KbnError } from '../errors';
+import { EventsProvider } from '../events';
+import { VislibVisConfigProvider } from './lib/vis_config';
+import { VisHandlerProvider } from './lib/handler';
 
-export default function VisFactory(Private) {
-  const ResizeChecker = Private(VislibLibResizeCheckerProvider);
+export function VislibVisProvider(Private) {
   const Events = Private(EventsProvider);
-  const VisConfig = Private(VisConifgProvider);
+  const VisConfig = Private(VislibVisConfigProvider);
   const Handler = Private(VisHandlerProvider);
 
   /**
@@ -26,13 +41,7 @@ export default function VisFactory(Private) {
     constructor($el, visConfigArgs) {
       super(arguments);
       this.el = $el.get ? $el.get(0) : $el;
-      this.binder = new Binder();
       this.visConfigArgs = _.cloneDeep(visConfigArgs);
-
-      // bind the resize function so it can be used as an event handler
-      this.resize = _.bind(this.resize, this);
-      this.resizeChecker = new ResizeChecker(this.el);
-      this.binder.on(this.resizeChecker, 'resize', this.resize);
     }
 
     hasLegend() {
@@ -56,20 +65,12 @@ export default function VisFactory(Private) {
 
       this.data = data;
 
-      if (!this.uiState) {
-        this.uiState = uiState;
-        this._uiStateChangeHandler = () => {
-          if (document.body.contains(this.el)) {
-            this.render(this.data, this.uiState);
-          }
-        };
-        uiState.on('change', this._uiStateChangeHandler);
-      }
+      this.uiState = uiState;
 
       this.visConfig = new VisConfig(this.visConfigArgs, this.data, this.uiState, this.el);
 
       this.handler = new Handler(this, this.visConfig);
-      this._runWithoutResizeChecker('render');
+      this._runOnHandler('render');
     }
 
     getLegendLabels() {
@@ -80,37 +81,12 @@ export default function VisFactory(Private) {
       return this.visConfig ? this.visConfig.get('legend.colors', null) : null;
     }
 
-    /**
-     * Resizes the visualization
-     *
-     * @method resize
-     */
-    resize() {
-      if (!this.data) {
-        return;
-      }
-
-      if (this.handler && _.isFunction(this.handler.resize)) {
-        this._runOnHandler('resize');
-      } else {
-        this.render(this.data, this.uiState);
-      }
-    }
-
-    _runWithoutResizeChecker(method) {
-      this.resizeChecker.stopSchedule();
-      this._runOnHandler(method);
-      this.resizeChecker.saveSize();
-      this.resizeChecker.saveDirty(false);
-      this.resizeChecker.continueSchedule();
-    }
-
     _runOnHandler(method) {
       try {
         this.handler[method]();
       } catch (error) {
 
-        if (error instanceof errors.KbnError) {
+        if (error instanceof KbnError) {
           error.displayToScreen(this.handler);
         } else {
           throw error;
@@ -128,11 +104,8 @@ export default function VisFactory(Private) {
      * @method destroy
      */
     destroy() {
-      const selection = d3.select(this.el).select('.vis-wrapper');
+      const selection = d3.select(this.el).select('.visWrapper');
 
-      this.binder.destroy();
-      this.resizeChecker.destroy();
-      if (this.uiState) this.uiState.off('change', this._uiStateChangeHandler);
       if (this.handler) this._runOnHandler('destroy');
 
       selection.remove();

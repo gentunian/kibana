@@ -1,12 +1,31 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 
 import expect from 'expect.js';
 import ngMock from 'ng_mock';
-import 'ui/fixed_scroll';
+import '../../fixed_scroll';
 import $ from 'jquery';
-import sinon from 'auto-release-sinon';
-import Promise from 'bluebird';
+import sinon from 'sinon';
 
 describe('FixedScroll directive', function () {
+  const sandbox = sinon.createSandbox();
 
   let compile;
   let flushPendingTasks;
@@ -55,13 +74,14 @@ describe('FixedScroll directive', function () {
         $scroller: $parent.find('.fixed-scroll-scroller')
       };
     };
-
   }));
 
   afterEach(function () {
     trash.splice(0).forEach(function ($el) {
       $el.remove();
     });
+
+    sandbox.restore();
   });
 
   it('does nothing when not needed', function () {
@@ -89,8 +109,8 @@ describe('FixedScroll directive', function () {
 
   describe('scroll event handling / tug of war prevention', function () {
     it('listens when needed, unlistens when not needed', function () {
-      const on = sinon.spy($.fn, 'on');
-      const off = sinon.spy($.fn, 'off');
+      const on = sandbox.spy($.fn, 'on');
+      const off = sandbox.spy($.fn, 'off');
 
       const els = compile(1.5);
       expect(on.callCount).to.be(2);
@@ -124,7 +144,7 @@ describe('FixedScroll directive', function () {
         let $to;
 
         beforeEach(function () {
-          spy = sinon.spy($.fn, 'scrollLeft');
+          spy = sandbox.spy($.fn, 'scrollLeft');
           els = compile(1.5);
           $from = els[names.from];
           $to = els[names.to];
@@ -155,7 +175,7 @@ describe('FixedScroll directive', function () {
           $from.scroll();
           expect(spy.callCount).to.be(2);
 
-          spy.reset();
+          spy.resetHistory();
           $to.scroll();
           expect(spy.callCount).to.be(0);
         });

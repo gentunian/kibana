@@ -1,10 +1,30 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 /**
  * A configuration object for a top nav component.
  * @typedef {Object} KbnTopNavConfig
  * @type Object
- * @property {string} key - A display string which will be shown in the top nav for this option.
+ * @property {string} key - identifier of menu item.
+ * @property {string} label - A display string which will be shown in the top nav for this option.
  * @property {string} [description] - optional, used for the screen-reader description of this
- *  menu. Defaults to "Toggle ${key} view" for templated menu items and just "${key}" for
+ *  menu. Defaults to "Toggle ${label} view" for templated menu items and just "${label}" for
  *  programmatic menu items
  * @property {string} testId - for testing purposes, can be used to retrieve this item.
  * @property {Object} [template] - an html template that will be shown when this item is clicked.
@@ -18,10 +38,10 @@
 /**
  * kbnTopNav directive
  *
- * The top section that shows the timepicker, load, share and save dialogues.
+ * The top section that optionally shows the timepicker and menu items.
  *
  * ```
- * <kbn-top-nav name="current-app-for-extensions" config="path.to.menuItems"></kbn-top-nav>
+ * <kbn-top-nav name="current-app-for-extensions" config="path.to.menuItems" ></kbn-top-nav>
  * ```
  *
  * Menu items/templates are passed to the kbnTopNav via the config attribute
@@ -35,19 +55,18 @@
 
 import _ from 'lodash';
 import angular from 'angular';
-import 'ui/watch_multi';
-import 'ui/directives/input_focus';
-import uiModules from 'ui/modules';
+import '../watch_multi';
+import '../directives/input_focus';
+import { uiModules } from '../modules';
 import template from './kbn_top_nav.html';
-import KbnTopNavControllerProvider from './kbn_top_nav_controller';
-import RegistryNavbarExtensionsProvider from 'ui/registry/navbar_extensions';
-import './bread_crumbs/bread_crumbs';
+import { KbnTopNavControllerProvider } from './kbn_top_nav_controller';
+import { NavBarExtensionsRegistryProvider } from '../registry/navbar_extensions';
 
 const module = uiModules.get('kibana');
 
 module.directive('kbnTopNav', function (Private) {
   const KbnTopNavController = Private(KbnTopNavControllerProvider);
-  const navbarExtensions = Private(RegistryNavbarExtensionsProvider);
+  const navbarExtensions = Private(NavBarExtensionsRegistryProvider);
   const getNavbarExtensions = _.memoize(function (name) {
     if (!name) throw new Error('navbar directive requires a name attribute');
     return _.sortBy(navbarExtensions.byAppName[name], 'order');
@@ -98,23 +117,46 @@ module.directive('kbnTopNav', function (Private) {
           $scope.transcludes[transclusionSlot] = transcludedItem;
         });
       });
-
       const extensions = getNavbarExtensions($attrs.name);
-      let controls = _.get($scope, $attrs.config, []);
 
-      if (controls instanceof KbnTopNavController) {
-        controls.addItems(extensions);
-      } else {
-        controls = controls.concat(extensions);
+      function initTopNav(newConfig, oldConfig) {
+        if (_.isEqual(oldConfig, newConfig)) return;
+
+        if (newConfig instanceof KbnTopNavController) {
+          newConfig.addItems(extensions);
+          $scope.kbnTopNav = new KbnTopNavController(newConfig);
+        } else {
+          newConfig = newConfig.concat(extensions);
+          $scope.kbnTopNav = new KbnTopNavController(newConfig);
+        }
+        $scope.kbnTopNav._link($scope, $element);
       }
 
-      $scope.kbnTopNav = new KbnTopNavController(controls);
-      $scope.kbnTopNav._link($scope, $element);
+      const getTopNavConfig = () => {
+        return _.get($scope, $attrs.config, []);
+      };
+
+      const topNavConfig = getTopNavConfig();
+
+      // Because we store $scope and $element on the kbnTopNavController, if this was passed an instance
+      // instead of a configuration, it will enter an infinite digest loop. Only watch for updates if a config
+      // was passed instead. This is ugly, but without diving into a larger refactor, the smallest temporary solution
+      // to get dynamic nav updates working for dashboard. Console is currently the only place that passes a
+      // KbnTopNavController (and a slew of tests).
+      if (!(topNavConfig instanceof KbnTopNavController)) {
+        $scope.$watch(getTopNavConfig, initTopNav, true);
+      }
+
+      initTopNav(topNavConfig, null);
+
+      if (!_.has($scope, 'showTimepickerInTopNav')) {
+        $scope.showTimepickerInTopNav = true;
+      }
 
       return $scope.kbnTopNav;
     },
 
-    link(scope, element) {
+    link(scope) {
       // These are the slots where transcluded elements can go.
       const transclusionSlotNames = ['topLeftCorner', 'bottomRow'];
 

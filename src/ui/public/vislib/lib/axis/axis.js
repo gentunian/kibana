@@ -1,19 +1,38 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import d3 from 'd3';
 import _ from 'lodash';
 import $ from 'jquery';
-import ErrorHandlerProvider from '../_error_handler';
-import AxisTitleProvider from './axis_title';
-import AxisLabelsProvider from './axis_labels';
-import AxisScaleProvider from './axis_scale';
-import AxisConfigProvider from './axis_config';
-import errors from 'ui/errors';
+import { VislibLibErrorHandlerProvider } from '../_error_handler';
+import { VislibLibAxisTitleProvider } from './axis_title';
+import { VislibAxisLabelsProvider } from './axis_labels';
+import { VislibAxisScaleProvider } from './axis_scale';
+import { VislibLibAxisConfigProvider } from './axis_config';
+import { VislibError } from '../../../errors';
 
-export default function AxisFactory(Private) {
-  const ErrorHandler = Private(ErrorHandlerProvider);
-  const AxisTitle = Private(AxisTitleProvider);
-  const AxisLabels = Private(AxisLabelsProvider);
-  const AxisScale = Private(AxisScaleProvider);
-  const AxisConfig = Private(AxisConfigProvider);
+export function VislibLibAxisProvider(Private) {
+  const ErrorHandler = Private(VislibLibErrorHandlerProvider);
+  const AxisTitle = Private(VislibLibAxisTitleProvider);
+  const AxisLabels = Private(VislibAxisLabelsProvider);
+  const AxisScale = Private(VislibAxisScaleProvider);
+  const AxisConfig = Private(VislibLibAxisConfigProvider);
 
   class Axis extends ErrorHandler {
     constructor(visConfig, axisConfigArgs) {
@@ -30,137 +49,33 @@ export default function AxisFactory(Private) {
       this.axisLabels = new AxisLabels(this.axisConfig, this.axisScale);
 
       this.stack = d3.layout.stack()
-      .x(d => {
-        return d.x;
-      })
-      .y(d => {
-        if (this.axisConfig.get('scale.offset') === 'expand') {
-          return Math.abs(d.y);
-        }
-        return d.y;
-      })
-      .offset(this.axisConfig.get('scale.offset', 'zero'));
+        .x(d => {
+          return d.x;
+        })
+        .y(d => {
+          if (typeof this.axisConfig.get('scale.offset') === 'function' && this.axisConfig.get('scale.offset').name === 'expand') {
+            return Math.abs(d.y);
+          }
+          return d.y;
+        })
+        .offset(this.axisConfig.get('scale.offset', 'zero'));
 
       const stackedMode = ['normal', 'grouped'].includes(this.axisConfig.get('scale.mode'));
       if (stackedMode) {
-        this.stack.out((d, y0, y) => {
-          return this._stackNegAndPosVals(d, y0, y);
+        this.stack = this._stackNegAndPosVals;
+      }
+    }
+
+    _stackNegAndPosVals(data) {
+      const cache = {};
+      data.forEach(series => {
+        series.forEach(value => {
+          if (!cache[value.x]) cache[value.x] = [0, 0];
+          value.y0 = cache[value.x][value.y < 0 ? 0 : 1];
+          cache[value.x][value.y < 0 ? 0 : 1] += value.y;
         });
-      }
-    }
-
-    /**
-     * Returns true for positive numbers
-     */
-    _isPositive(num) {
-      return num >= 0;
-    }
-
-    /**
-     * Returns true for negative numbers
-     */
-    _isNegative(num) {
-      return num < 0;
-    }
-
-    /**
-     * Adds two input values
-     */
-    _addVals(a, b) {
-      return a + b;
-    }
-
-    /**
-     * Returns the results of the addition of numbers in a filtered array.
-     */
-    _sumYs(arr, callback) {
-      const filteredArray = arr.filter(callback);
-
-      return (filteredArray.length) ? filteredArray.reduce(this._addVals) : 0;
-    }
-
-    /**
-     * Calculates the d.y0 value for stacked data in D3.
-     */
-    _calcYZero(y, arr) {
-      if (y === 0 && this._lastY0) return this._sumYs(arr, this._lastY0 > 0 ? this._isPositive : this._isNegative);
-      if (y >= 0) return this._sumYs(arr, this._isPositive);
-      return this._sumYs(arr, this._isNegative);
-    }
-
-    _getCounts(i, j) {
-      const data = this.visConfig.data.chartData();
-      const dataLengths = {};
-
-      dataLengths.charts = data.length;
-      dataLengths.stacks = dataLengths.charts ? data[i].series.length : 0;
-      dataLengths.values = dataLengths.stacks ? data[i].series[j].values.length : 0;
-
-      return dataLengths;
-    }
-
-    _createCache() {
-      const cache = {
-        index: {
-          chart: 0,
-          stack: 0,
-          value: 0
-        },
-        yValsArr: []
-      };
-
-      cache.count = this._getCounts(cache.index.chart, cache.index.stack);
-
-      return cache;
-    }
-    /**
-     * Stacking function passed to the D3 Stack Layout `.out` API.
-     * See: https://github.com/mbostock/d3/wiki/Stack-Layout
-     * It is responsible for calculating the correct d.y0 value for
-     * mixed datasets containing both positive and negative values.
-     */
-    _stackNegAndPosVals(d, y0, y) {
-      const data = this.visConfig.data.chartData();
-
-      // Storing counters and data characteristics needed to stack values properly
-      if (!this._cache) {
-        this._cache = this._createCache();
-      }
-
-      d.y0 = this._calcYZero(y, this._cache.yValsArr);
-      if (d.y0 > 0) this._lastY0 = 1;
-      if (d.y0 < 0) this._lastY0 = -1;
-      ++this._cache.index.stack;
-
-
-      // last stack, or last value, reset the stack count and y value array
-      const lastStack = (this._cache.index.stack >= this._cache.count.stacks);
-      if (lastStack) {
-        this._cache.index.stack = 0;
-        ++this._cache.index.value;
-        this._cache.yValsArr = [];
-        // still building the stack collection, push v value to array
-      } else if (y !== 0) {
-        this._cache.yValsArr.push(y);
-      }
-
-      // last value, prepare for the next chart, if one exists
-      const lastValue = (this._cache.index.value >= this._cache.count.values);
-      if (lastValue) {
-        this._cache.index.value = 0;
-        ++this._cache.index.chart;
-
-        // no more charts, reset the queue and finish
-        if (this._cache.index.chart >= this._cache.count.charts) {
-          this._cache = this._createCache();
-          return;
-        }
-
-        // get stack and value count for next chart
-        const chartSeries = data[this._cache.index.chart].series;
-        this._cache.count.stacks = chartSeries.length;
-        this._cache.count.values = chartSeries.length ? chartSeries[this._cache.index.stack].values.length : 0;
-      }
+      });
+      return data;
     }
 
     render() {
@@ -173,6 +88,7 @@ export default function AxisFactory(Private) {
       const elSelector = this.axisConfig.get('elSelector');
       const rootEl = this.axisConfig.get('rootEl');
       $(rootEl).find(elSelector).find('svg').remove();
+      this.axisTitle.destroy();
     }
 
     getAxis(length) {
@@ -181,10 +97,10 @@ export default function AxisFactory(Private) {
       const axisFormatter = this.axisConfig.get('labels.axisFormatter');
 
       return d3.svg.axis()
-      .scale(scale)
-      .tickFormat(axisFormatter)
-      .ticks(this.tickScale(length))
-      .orient(position);
+        .scale(scale)
+        .tickFormat(axisFormatter)
+        .ticks(this.tickScale(length))
+        .orient(position);
     }
 
     getScale() {
@@ -201,9 +117,9 @@ export default function AxisFactory(Private) {
 
     tickScale(length) {
       const yTickScale = d3.scale.linear()
-      .clamp(true)
-      .domain([20, 40, 1000])
-      .range([0, 3, 11]);
+        .clamp(true)
+        .domain([20, 40, 1000])
+        .range([0, 3, 11]);
 
       return Math.ceil(yTickScale(length));
     }
@@ -219,7 +135,6 @@ export default function AxisFactory(Private) {
     adjustSize() {
       const config = this.axisConfig;
       const style = config.get('style');
-      const margin = this.visConfig.get('style.margin');
       const chartEl = this.visConfig.get('el');
       const position = config.get('position');
       const axisPadding = 5;
@@ -244,13 +159,13 @@ export default function AxisFactory(Private) {
           selection.attr('height', Math.ceil(length));
           if (position === 'top') {
             selection.select('g')
-            .attr('transform', `translate(0, ${length - parseInt(style.lineWidth)})`);
+              .attr('transform', `translate(0, ${length - parseInt(style.lineWidth)})`);
             selection.select('path')
-            .attr('transform', 'translate(1,0)');
+              .attr('transform', 'translate(1,0)');
           }
           if (config.get('type') === 'value') {
-            const spacerNodes = $(chartEl).find(`.y-axis-spacer-block-${position}`);
-            const elHeight = $(chartEl).find(`.axis-wrapper-${position}`).height();
+            const spacerNodes = $(chartEl).find(`.visAxis__spacer--y-${position}`);
+            const elHeight = $(chartEl).find(`.visAxis__column--${position}`).height();
             spacerNodes.height(elHeight);
           }
         } else {
@@ -258,7 +173,7 @@ export default function AxisFactory(Private) {
           selection.attr('width', axisWidth);
           if (position === 'left') {
             selection.select('g')
-            .attr('transform', `translate(${axisWidth},0)`);
+              .attr('transform', `translate(${axisWidth},0)`);
           }
         }
       };
@@ -266,18 +181,19 @@ export default function AxisFactory(Private) {
 
     validate() {
       if (this.axisConfig.isLogScale() && this.axisConfig.isPercentage()) {
-        throw new errors.VislibError(`Can't mix percentage mode with log scale.`);
+        throw new VislibError(`Can't mix percentage mode with log scale.`);
       }
     }
 
     draw() {
+      const svgs = [];
       const self = this;
       const config = this.axisConfig;
       const style = config.get('style');
 
       return function (selection) {
         const n = selection[0].length;
-        if (config.get('show') && self.axisTitle) {
+        if (config.get('show') && self.axisTitle && ['left', 'top'].includes(config.get('position'))) {
           self.axisTitle.render(selection);
         }
         selection.each(function () {
@@ -293,29 +209,37 @@ export default function AxisFactory(Private) {
 
           if (config.get('show')) {
             const svg = div.append('svg')
-            .attr('width', width)
-            .attr('height', height);
+              .attr('focusable', 'false')
+              .attr('width', width)
+              .attr('height', height);
+
+            svgs.push(svg);
 
             const axisClass = self.axisConfig.isHorizontal() ? 'x' : 'y';
             svg.append('g')
-            .attr('class', `${axisClass} axis ${config.get('id')}`)
-            .call(axis);
+              .attr('class', `${axisClass} axis ${config.get('id')}`)
+              .call(axis);
 
             const container = svg.select('g.axis').node();
             if (container) {
               svg.select('path')
-              .style('stroke', style.color)
-              .style('stroke-width', style.lineWidth)
-              .style('stroke-opacity', style.opacity);
+                .style('stroke', style.color)
+                .style('stroke-width', style.lineWidth)
+                .style('stroke-opacity', style.opacity);
               svg.selectAll('line')
-              .style('stroke', style.tickColor)
-              .style('stroke-width', style.tickWidth)
-              .style('stroke-opacity', style.opacity);
+                .style('stroke', style.tickColor)
+                .style('stroke-width', style.tickWidth)
+                .style('stroke-opacity', style.opacity);
             }
             if (self.axisLabels) self.axisLabels.render(svg);
-            svg.call(self.adjustSize());
           }
         });
+
+        if (self.axisTitle && ['right', 'bottom'].includes(config.get('position'))) {
+          self.axisTitle.render(selection);
+        }
+
+        svgs.forEach(svg => svg.call(self.adjustSize()));
       };
     }
   }

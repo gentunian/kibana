@@ -1,7 +1,26 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import d3 from 'd3';
 import _ from 'lodash';
-import Binder from 'ui/binder';
-import positionTooltip from './position_tooltip';
+import { Binder } from '../../../binder';
+import { positionTooltip } from './position_tooltip';
 import $ from 'jquery';
 
 let allContents = [];
@@ -15,7 +34,7 @@ let allContents = [];
  * @param formatter {Function} Tooltip formatter
  * @param events {Constructor} Allows tooltip to return event response data
  */
-function Tooltip(id, el, formatter, events) {
+export function Tooltip(id, el, formatter, events) {
   if (!(this instanceof Tooltip)) {
     return new Tooltip(id, el, formatter, events);
   }
@@ -25,9 +44,9 @@ function Tooltip(id, el, formatter, events) {
   this.order = 100; // higher ordered contents are rendered below the others
   this.formatter = formatter;
   this.events = events;
-  this.containerClass = 'vis-wrapper';
-  this.tooltipClass = 'vis-tooltip';
-  this.tooltipSizerClass = 'vis-tooltip-sizing-clone';
+  this.containerClass = 'visWrapper';
+  this.tooltipClass = 'visTooltip';
+  this.tooltipSizerClass = 'visTooltip__sizingClone';
   this.showCondition = _.constant(true);
 
   this.binder = new Binder();
@@ -49,10 +68,10 @@ Tooltip.prototype.$get = _.once(function () {
  */
 Tooltip.prototype.$getSizer = _.once(function () {
   return this.$get()
-  .clone()
-  .removeClass(this.tooltipClass)
-  .addClass(this.tooltipSizerClass)
-  .appendTo(document.body);
+    .clone()
+    .removeClass(this.tooltipClass)
+    .addClass(this.tooltipSizerClass)
+    .appendTo(document.body);
 });
 
 /**
@@ -101,7 +120,7 @@ Tooltip.prototype.hide = function () {
  */
 Tooltip.prototype.$getChart = function () {
   const chart = $(this.container && this.container.node());
-  return chart.size() ? chart : false;
+  return chart.length ? chart : false;
 };
 
 /**
@@ -147,10 +166,10 @@ Tooltip.prototype.render = function () {
         if (html) allContents.push({ id: id, html: html, order: order });
 
         const allHtml = _(allContents)
-        .sortBy('order')
-        .pluck('html')
-        .compact()
-        .join('\n');
+          .sortBy('order')
+          .pluck('html')
+          .compact()
+          .join('\n');
 
         if (allHtml) {
           $tooltip.html(allHtml);
@@ -177,9 +196,10 @@ Tooltip.prototype.render = function () {
 };
 
 Tooltip.prototype.destroy = function () {
+  this.hide();
   this.binder.destroy();
 };
 
-module.exports = function TooltipFactoryProvider() {
+export function TooltipProvider() {
   return Tooltip;
-};
+}

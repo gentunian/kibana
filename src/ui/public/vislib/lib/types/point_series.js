@@ -1,27 +1,61 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import _ from 'lodash';
-import errors from 'ui/errors';
 
-export default function ColumnHandler(Private) {
+export function VislibTypesPointSeries() {
 
-  const createSeries = (cfg, series) => {
-    const stacked = ['stacked', 'percentage', 'wiggle', 'silhouette'].includes(cfg.mode);
-    let interpolate = cfg.interpolate;
-    // for backward compatibility when loading URLs or configs we need to check smoothLines
-    if (cfg.smoothLines) interpolate = 'cardinal';
+  const createSerieFromParams = (cfg, seri) => {
+    const matchingSeriesParams = cfg.seriesParams ? cfg.seriesParams.find(seriConfig => {
+      return seri.id === seriConfig.data.id;
+    }) : null;
+
+
+    const interpolate = cfg.smoothLines ? 'cardinal' : cfg.interpolate;
+
+    if (!matchingSeriesParams) {
+      const stacked = ['stacked', 'percentage', 'wiggle', 'silhouette'].includes(cfg.mode);
+      return {
+        show: true,
+        type: cfg.type || 'line',
+        mode: stacked ? 'stacked' : 'normal',
+        interpolate: interpolate,
+        drawLinesBetweenPoints: cfg.drawLinesBetweenPoints,
+        showCircles: cfg.showCircles,
+        radiusRatio: cfg.radiusRatio,
+        data: seri
+      };
+    }
 
     return {
+      ...matchingSeriesParams,
+      data: seri,
+      radiusRatio: cfg.radiusRatio
+    };
+  };
+
+  const createSeries = (cfg, series) => {
+    return {
       type: 'point_series',
+      addTimeMarker: cfg.addTimeMarker,
       series: _.map(series, (seri) => {
-        return {
-          show: true,
-          type: cfg.type || 'line',
-          mode: stacked ? 'stacked' : 'normal',
-          interpolate: interpolate,
-          drawLinesBetweenPoints: cfg.drawLinesBetweenPoints,
-          showCircles: cfg.showCircles,
-          radiusRatio: cfg.radiusRatio,
-          data: seri
-        };
+        return createSerieFromParams(cfg, seri);
       })
     };
   };
@@ -70,9 +104,9 @@ export default function ColumnHandler(Private) {
               type: config.scale,
               setYExtents: config.setYExtents,
               defaultYExtents: config.defaultYExtents,
-              min : isUserDefinedYAxis ? config.yAxis.min : undefined,
-              max : isUserDefinedYAxis ? config.yAxis.max : undefined,
-              mode : mode
+              min: isUserDefinedYAxis ? config.yAxis.min : undefined,
+              max: isUserDefinedYAxis ? config.yAxis.max : undefined,
+              mode: mode
             },
             labels: {
               axisFormatter: data.data.yAxisFormatter || data.get('yAxisFormatter')
@@ -82,6 +116,12 @@ export default function ColumnHandler(Private) {
             }
           }
         ];
+      } else {
+        config.valueAxes.forEach(axis => {
+          if (axis.labels) {
+            axis.labels.axisFormatter = data.data.yAxisFormatter || data.get('yAxisFormatter');
+          }
+        });
       }
 
       if (!config.categoryAxes) {
@@ -100,6 +140,13 @@ export default function ColumnHandler(Private) {
             }
           }
         ];
+      } else {
+        const categoryAxis1 = config.categoryAxes.find((categoryAxis) => {
+          return categoryAxis.id === 'CategoryAxis-1';
+        });
+        if (categoryAxis1) {
+          categoryAxis1.title.text = data.get('xAxisLabel');
+        }
       }
 
       if (!config.charts) {
@@ -148,12 +195,18 @@ export default function ColumnHandler(Private) {
 
     heatmap: (cfg, data) => {
       const defaults = create()(cfg, data);
+      const seriesLimit = 25;
+      const hasCharts = defaults.charts.length;
+      const tooManySeries = defaults.charts.length && defaults.charts[0].series.length > seriesLimit;
+      if (hasCharts && tooManySeries) {
+        defaults.error = 'There are too many series defined.';
+      }
       defaults.valueAxes[0].show = false;
       defaults.categoryAxes[0].style = {
         rangePadding: 0,
         rangeOuterPadding: 0
       };
-      defaults.valueAxes.push({
+      defaults.categoryAxes.push({
         id: 'CategoryAxis-2',
         type: 'category',
         position: 'left',
@@ -162,11 +215,15 @@ export default function ColumnHandler(Private) {
           inverted: true
         },
         labels: {
-          axisFormatter: val => val
+          filter: false,
+          axisFormatter: function (val) { return val; }
         },
         style: {
           rangePadding: 0,
           rangeOuterPadding: 0
+        },
+        title: {
+          text: data.get('zAxisLabel') || ''
         }
       });
       return defaults;

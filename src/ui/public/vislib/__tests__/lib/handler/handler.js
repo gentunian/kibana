@@ -1,3 +1,22 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import ngMock from 'ng_mock';
 import expect from 'expect.js';
 
@@ -7,9 +26,8 @@ import columns from 'fixtures/vislib/mock_data/date_histogram/_columns';
 import rows from 'fixtures/vislib/mock_data/date_histogram/_rows';
 import stackedSeries from 'fixtures/vislib/mock_data/date_histogram/_stacked_series';
 import $ from 'jquery';
-import VislibLibHandlerHandlerProvider from 'ui/vislib/lib/handler';
 import FixturesVislibVisFixtureProvider from 'fixtures/vislib/_vis_fixture';
-import 'ui/persisted_state';
+import '../../../../persisted_state';
 const dateHistogramArray = [
   series,
   columns,
@@ -25,7 +43,6 @@ const names = [
 
 dateHistogramArray.forEach(function (data, i) {
   describe('Vislib Handler Test Suite for ' + names[i] + ' Data', function () {
-    let Handler;
     let vis;
     let persistedState;
     const events = [
@@ -35,7 +52,6 @@ dateHistogramArray.forEach(function (data, i) {
 
     beforeEach(ngMock.module('kibana'));
     beforeEach(ngMock.inject(function (Private, $injector) {
-      Handler = Private(VislibLibHandlerHandlerProvider);
       vis = Private(FixturesVislibVisFixtureProvider)();
       persistedState = new ($injector.get('PersistedState'))();
       vis.render(data, persistedState);
@@ -152,6 +168,5 @@ dateHistogramArray.forEach(function (data, i) {
       });
 
     });
-
   });
 });

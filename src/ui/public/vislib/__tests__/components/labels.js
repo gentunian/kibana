@@ -1,11 +1,29 @@
-import angular from 'angular';
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import _ from 'lodash';
 import expect from 'expect.js';
 import ngMock from 'ng_mock';
-import VislibComponentsLabelsLabelsProvider from 'ui/vislib/components/labels/labels';
-import VislibComponentsLabelsDataArrayProvider from 'ui/vislib/components/labels/data_array';
-import VislibComponentsLabelsUniqLabelsProvider from 'ui/vislib/components/labels/uniq_labels';
-import VislibComponentsLabelsFlattenSeriesProvider from 'ui/vislib/components/labels/flatten_series';
+import { VislibComponentsLabelsLabelsProvider } from '../../components/labels/labels';
+import { VislibComponentsLabelsDataArrayProvider } from '../../components/labels/data_array';
+import { VislibComponentsLabelsUniqLabelsProvider } from '../../components/labels/uniq_labels';
+import { VislibComponentsLabelsFlattenSeriesProvider } from '../../components/labels/flatten_series';
 
 let getLabels;
 let seriesLabels;
@@ -13,7 +31,6 @@ let rowsLabels;
 let seriesArr;
 let rowsArr;
 let uniqLabels;
-let error;
 
 const seriesData = {
   'label': '',
@@ -115,8 +132,8 @@ describe('Vislib Labels Module Test Suite', function () {
       getLabels = Private(VislibComponentsLabelsLabelsProvider);
       seriesLabels = getLabels(seriesData);
       rowsLabels = getLabels(rowsData);
-      seriesArr = _.isArray(seriesLabels);
-      rowsArr = _.isArray(rowsLabels);
+      seriesArr = Array.isArray(seriesLabels);
+      rowsArr = Array.isArray(rowsLabels);
       uniqLabels = _.chain(rowsData.rows)
         .pluck('series')
         .flattenDeep()
@@ -179,8 +196,8 @@ describe('Vislib Labels Module Test Suite', function () {
       dataArray = Private(VislibComponentsLabelsDataArrayProvider);
       seriesLabels = dataArray(seriesData);
       rowsLabels = dataArray(rowsData);
-      testSeries = _.isArray(seriesLabels);
-      testRows = _.isArray(rowsLabels);
+      testSeries = Array.isArray(seriesLabels);
+      testRows = Array.isArray(rowsLabels);
     }));
 
     it('should throw an error if the input is not an object', function () {
@@ -290,7 +307,7 @@ describe('Vislib Labels Module Test Suite', function () {
     beforeEach(ngMock.inject(function (Private) {
       uniqLabels = Private(VislibComponentsLabelsUniqLabelsProvider);
       uniq = uniqLabels(arrObj, function (d) { return d; });
-      testArr = _.isArray(uniq);
+      testArr = Array.isArray(uniq);
     }));
 
     it('should throw an error if input is not an array', function () {
@@ -364,8 +381,8 @@ describe('Vislib Labels Module Test Suite', function () {
       getSeries = Private(VislibComponentsLabelsFlattenSeriesProvider);
       columnsLabels = getSeries(columnsData);
       rowsLabels = getSeries(rowsData);
-      columnsArr = _.isArray(columnsLabels);
-      rowsArr = _.isArray(rowsLabels);
+      columnsArr = Array.isArray(columnsLabels);
+      rowsArr = Array.isArray(rowsLabels);
     }));
 
     it('should throw an error if input is not an object', function () {

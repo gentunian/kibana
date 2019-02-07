@@ -1,9 +1,32 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import d3 from 'd3';
 import _ from 'lodash';
-import dataLabel from 'ui/vislib/lib/_data_label';
-import VislibLibDispatchProvider from '../lib/dispatch';
-import TooltipProvider from 'ui/vis/components/tooltip';
-export default function ChartBaseClass(Private) {
+import { dataLabel } from '../lib/_data_label';
+import { VislibLibDispatchProvider } from '../lib/dispatch';
+import { TooltipProvider } from '../../vis/components/tooltip';
+import { getFormat } from '../../visualize/loader/pipeline_helpers/utilities';
+import { HierarchicalTooltipFormatterProvider } from '../../agg_response/hierarchical/_hierarchical_tooltip_formatter';
+import { PointSeriesTooltipFormatter } from '../../agg_response/point_series/_tooltip_formatter';
+
+export function VislibVisualizationsChartProvider(Private) {
 
   const Dispatch = Private(VislibLibDispatchProvider);
   const Tooltip = Private(TooltipProvider);
@@ -25,12 +48,16 @@ export default function ChartBaseClass(Private) {
 
       const events = this.events = new Dispatch(handler);
 
+      const fieldFormatter = getFormat(this.handler.data.get('tooltipFormatter'));
+      const tooltipFormatterProvider = this.handler.visConfig.get('type') === 'pie' ?
+        Private(HierarchicalTooltipFormatterProvider) : Private(PointSeriesTooltipFormatter);
+      const tooltipFormatter = tooltipFormatterProvider(fieldFormatter);
+
       if (this.handler.visConfig && this.handler.visConfig.get('addTooltip', false)) {
         const $el = this.handler.el;
-        const formatter = this.handler.data.get('tooltipFormatter');
 
         // Add tooltip
-        this.tooltip = new Tooltip('chart', $el, formatter, events);
+        this.tooltip = new Tooltip('chart', $el, tooltipFormatter, events);
         this.tooltips.push(this.tooltip);
       }
 

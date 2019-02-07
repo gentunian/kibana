@@ -1,333 +1,277 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
 
 import expect from 'expect.js';
 
-import {
-  bdd,
-  scenarioManager,
-} from '../../../support';
+export default function ({ getService, getPageObjects }) {
+  const log = getService('log');
+  const retry = getService('retry');
+  const inspector = getService('inspector');
+  const find = getService('find');
+  const testSubjects = getService('testSubjects');
+  const browser = getService('browser');
+  const PageObjects = getPageObjects(['common', 'visualize', 'timePicker', 'settings']);
 
-import PageObjects from '../../../support/page_objects';
 
-bdd.describe('visualize app', function describeIndexTests() {
-  const fromTime = '2015-09-19 06:31:44.000';
-  const toTime = '2015-09-23 18:31:44.000';
+  describe('tile map visualize app', function () {
 
-  bdd.before(function () {
+    describe('incomplete config', function describeIndexTests() {
 
-    PageObjects.common.debug('navigateToApp visualize');
-    return PageObjects.common.navigateToUrl('visualize', 'new')
-    .then(function () {
-      PageObjects.common.debug('clickTileMap');
-      return PageObjects.visualize.clickTileMap();
-    })
-    .then(function () {
-      return PageObjects.visualize.clickNewSearch();
-    })
-    .then(function () {
-      PageObjects.common.debug('Set absolute time range from \"' + fromTime + '\" to \"' + toTime + '\"');
-      return PageObjects.header.setAbsoluteRange(fromTime, toTime);
-    })
-    .then(function () {
-      PageObjects.common.debug('select bucket Geo Coordinates');
-      return PageObjects.visualize.clickBucket('Geo Coordinates');
-    })
-    .then(function () {
-      PageObjects.common.debug('Click aggregation Geohash');
-      return PageObjects.visualize.selectAggregation('Geohash');
-    })
-    .then(function () {
-      PageObjects.common.debug('Click field geo.coordinates');
-      return PageObjects.common.try(function tryingForTime() {
-        return PageObjects.visualize.selectField('geo.coordinates');
+      before(async function () {
+        await browser.setWindowSize(1280, 1000);
+
+        const fromTime = '2015-09-19 06:31:44.000';
+        const toTime = '2015-09-23 18:31:44.000';
+
+        log.debug('navigateToApp visualize');
+        await PageObjects.visualize.navigateToNewVisualization();
+        log.debug('clickTileMap');
+        await PageObjects.visualize.clickTileMap();
+        await PageObjects.visualize.clickNewSearch();
+        await PageObjects.timePicker.setAbsoluteRange(fromTime, toTime);
+        //do not configure aggs
       });
-    })
-    .then(function () {
-      return PageObjects.visualize.clickGo();
-    })
-    .then(function () {
-      return PageObjects.header.isGlobalLoadingIndicatorHidden();
+
+
+      it('should be able to zoom in twice', async () => {
+        //should not throw
+        await PageObjects.visualize.clickMapZoomIn();
+        await PageObjects.visualize.clickMapZoomIn();
+      });
+    });
+
+
+    describe('complete config', function describeIndexTests() {
+      before(async function () {
+        await browser.setWindowSize(1280, 1000);
+
+        const fromTime = '2015-09-19 06:31:44.000';
+        const toTime = '2015-09-23 18:31:44.000';
+
+        log.debug('navigateToApp visualize');
+        await PageObjects.visualize.navigateToNewVisualization();
+        log.debug('clickTileMap');
+        await PageObjects.visualize.clickTileMap();
+        await PageObjects.visualize.clickNewSearch();
+        await PageObjects.timePicker.setAbsoluteRange(fromTime, toTime);
+        log.debug('select bucket Geo Coordinates');
+        await PageObjects.visualize.clickBucket('Geo Coordinates');
+        log.debug('Click aggregation Geohash');
+        await PageObjects.visualize.selectAggregation('Geohash');
+        log.debug('Click field geo.coordinates');
+        await retry.try(async function tryingForTime() {
+          await PageObjects.visualize.selectField('geo.coordinates');
+        });
+        await PageObjects.visualize.clickGo();
+      });
+
+      /**
+       * manually compare data due to possible small difference in numbers. This is browser dependent.
+       */
+      function compareTableData(actual, expected) {
+        log.debug('comparing expected: ', expected);
+        log.debug('with actual: ', actual);
+
+        const roundedValues = actual.map(row => {
+          // Parse last element in each row as JSON and floor the lat/long value
+          const coords = JSON.parse(row[row.length - 1]);
+          row[row.length - 1] = {
+            lat: Math.floor(parseFloat(coords.lat)),
+            lon: Math.floor(parseFloat(coords.lon)),
+          };
+          return row;
+        });
+
+        expect(roundedValues).to.eql(expected);
+      }
+
+      describe('tile map chart', function indexPatternCreation() {
+        it('should have inspector enabled', async function () {
+          await inspector.expectIsEnabled();
+        });
+
+        it('should show correct tile map data on default zoom level', async function () {
+          const expectedTableData = [
+            ['-', '9', '5,787', { 'lat': 37, 'lon': -104 } ],
+            ['-', 'd', '5,600', { 'lat': 37, 'lon': -82 } ],
+            ['-', 'c', '1,319', { 'lat': 47, 'lon': -110 } ],
+            ['-', 'b', '999', { 'lat': 62, 'lon': -156 } ],
+            ['-', 'f', '187', { 'lat': 45, 'lon': -83 } ],
+            ['-', '8', '108', { 'lat': 18, 'lon': -157 } ]
+          ];
+          //level 1
+          await PageObjects.visualize.clickMapZoomOut();
+          //level 0
+          await PageObjects.visualize.clickMapZoomOut();
+
+          await inspector.open();
+          await inspector.setTablePageSize(50);
+          const actualTableData = await inspector.getTableData();
+          await inspector.close();
+          compareTableData(actualTableData, expectedTableData);
+        });
+
+        it('should not be able to zoom out beyond 0', async function () {
+          await PageObjects.visualize.zoomAllTheWayOut();
+          const enabled = await PageObjects.visualize.getMapZoomOutEnabled();
+          expect(enabled).to.be(false);
+        });
+
+        // See https://github.com/elastic/kibana/issues/13137 if this test starts failing intermittently
+        it('Fit data bounds should zoom to level 3', async function () {
+          const expectedPrecision2DataTable = [
+            ['-', 'dn', '1,429', { 'lat': 36, 'lon': -85 }],
+            ['-', 'dp', '1,418', { 'lat': 41, 'lon': -85 }],
+            ['-', '9y', '1,215', { 'lat': 36, 'lon': -96 }],
+            ['-', '9z', '1,099', { 'lat': 42, 'lon': -96 }],
+            ['-', 'dr', '1,076', { 'lat': 42, 'lon': -74 }],
+            ['-', 'dj', '982', { 'lat': 31, 'lon': -85 }],
+            ['-', '9v', '938', { 'lat': 31, 'lon': -96 }],
+            ['-', '9q', '722', { 'lat': 36, 'lon': -120 }],
+            ['-', '9w', '475', { 'lat': 36, 'lon': -107 }],
+            ['-', 'cb', '457', { 'lat': 46, 'lon': -96 }],
+            [ '-', 'c2', '453', { lat: 47, lon: -120 } ],
+            [ '-', '9x', '420', { lat: 41, lon: -107 } ],
+            [ '-', 'dq', '399', { lat: 37, lon: -78 } ],
+            [ '-', '9r', '396', { lat: 41, lon: -120 } ],
+            [ '-', '9t', '274', { lat: 32, lon: -107 } ],
+            [ '-', 'c8', '271', { lat: 47, lon: -107 } ],
+            [ '-', 'dh', '214', { lat: 26, lon: -82 } ],
+            [ '-', 'b6', '207', { lat: 60, lon: -162 } ],
+            [ '-', 'bd', '206', { lat: 59, lon: -153 } ],
+            [ '-', 'b7', '167', { lat: 64, lon: -163 } ],
+          ];
+
+          await PageObjects.visualize.clickMapFitDataBounds();
+          await inspector.open();
+          const data = await inspector.getTableData();
+          await inspector.close();
+          compareTableData(data, expectedPrecision2DataTable);
+        });
+
+        it('Newly saved visualization retains map bounds', async () => {
+          const vizName1 = 'Visualization TileMap';
+
+          await PageObjects.visualize.clickMapZoomIn();
+          await PageObjects.visualize.clickMapZoomIn();
+
+          const mapBounds = await PageObjects.visualize.getMapBounds();
+          await inspector.close();
+
+          await PageObjects.visualize.saveVisualizationExpectSuccess(vizName1);
+
+          const afterSaveMapBounds = await PageObjects.visualize.getMapBounds();
+
+          await inspector.close();
+          // For some reason the values are slightly different, so we can't check that they are equal. But we did
+          // have a bug where after the save, there were _no_ map bounds. So this checks for the later case, but
+          // until we figure out how to make sure the map center is always the exact same, we can't comparison check.
+          expect(mapBounds).to.not.be(undefined);
+          expect(afterSaveMapBounds).to.not.be(undefined);
+        });
+
+      });
+
+      describe('Only request data around extent of map option', async () => {
+
+        it('when checked adds filters to aggregation', async () => {
+          const vizName1 = 'Visualization TileMap';
+          await PageObjects.visualize.loadSavedVisualization(vizName1);
+          await inspector.open();
+          await inspector.expectTableHeaders(['filter', 'geohash_grid', 'Count', 'Geo Centroid']);
+          await inspector.close();
+        });
+
+        it('when not checked does not add filters to aggregation', async () => {
+          await PageObjects.visualize.toggleOpenEditor(2);
+          await PageObjects.visualize.toggleIsFilteredByCollarCheckbox();
+          await PageObjects.visualize.clickGo();
+          await inspector.open();
+          await inspector.expectTableHeaders(['geohash_grid', 'Count', 'Geo Centroid']);
+          await inspector.close();
+        });
+
+        after(async () => {
+          await PageObjects.visualize.toggleIsFilteredByCollarCheckbox();
+          await PageObjects.visualize.clickGo();
+        });
+      });
+    });
+
+    describe('zoom warning behavior', function describeIndexTests() {
+
+      const waitForLoading = false;
+      let zoomWarningEnabled;
+      let last = false;
+      const toastDefaultLife = 6000;
+
+      before(async function () {
+        await browser.setWindowSize(1280, 1000);
+
+        log.debug('navigateToApp visualize');
+        await PageObjects.visualize.navigateToNewVisualization();
+        log.debug('clickTileMap');
+        await PageObjects.visualize.clickTileMap();
+        await PageObjects.visualize.clickNewSearch();
+
+        zoomWarningEnabled = await testSubjects.exists('zoomWarningEnabled');
+        log.debug(`Zoom warning enabled: ${zoomWarningEnabled}`);
+
+        const zoomLevel = 9;
+        for (let i = 0; i < zoomLevel; i++) {
+          await PageObjects.visualize.clickMapZoomIn();
+        }
+
+      });
+
+      beforeEach(async function () {
+        await PageObjects.visualize.clickMapZoomIn(waitForLoading);
+      });
+
+      afterEach(async function () {
+        if (!last) {
+          await PageObjects.common.sleep(toastDefaultLife);
+          await PageObjects.visualize.clickMapZoomOut(waitForLoading);
+        }
+      });
+
+      it('should show warning at zoom 10',
+        async () => {
+          await testSubjects.existOrFail('maxZoomWarning');
+        });
+
+      it('should continue providing zoom warning if left alone',
+        async () => {
+          await testSubjects.existOrFail('maxZoomWarning');
+        });
+
+      it('should suppress zoom warning if suppress warnings button clicked',
+        async () => {
+          last = true;
+          await PageObjects.visualize.waitForVisualization();
+          await find.clickByCssSelector('[data-test-subj="suppressZoomWarnings"]');
+          await PageObjects.visualize.clickMapZoomOut(waitForLoading);
+          await testSubjects.waitForDeleted('suppressZoomWarnings');
+          await PageObjects.visualize.clickMapZoomIn(waitForLoading);
+
+          await testSubjects.missingOrFail('maxZoomWarning');
+        });
     });
   });
-
-  bdd.describe('tile map chart', function indexPatternCreation() {
-
-    bdd.it('should show correct tile map data on default zoom level', function () {
-      const expectedTableData = [ 'dn 1,429', 'dp 1,418', '9y 1,215', '9z 1,099', 'dr 1,076',
-        'dj 982', '9v 938', '9q 722', '9w 475', 'cb 457', 'c2 453', '9x 420', 'dq 399',
-        '9r 396', '9t 274', 'c8 271', 'dh 214', 'b6 207', 'bd 206', 'b7 167', 'f0 141',
-        'be 128', '9m 126', 'bf 85', 'de 73', 'bg 71', '9p 71', 'c1 57', 'c4 50', '9u 48',
-        'f2 46', '8e 45', 'b3 38', 'bs 36', 'c0 31', '87 28', 'bk 23', '8f 18', 'b5 14',
-        '84 14', 'dx 9', 'bu 9', 'b1 9', 'b4 6', '9n 3', '8g 3'
-      ];
-
-      return PageObjects.visualize.collapseChart()
-      .then(function () {
-        return PageObjects.settings.setPageSize('All');
-      })
-      .then(function getDataTableData() {
-        return PageObjects.visualize.getDataTableData()
-        .then(function showData(data) {
-          expect(data.trim().split('\n')).to.eql(expectedTableData);
-          return PageObjects.visualize.collapseChart();
-        });
-      });
-    });
-
-
-    bdd.it('should zoom out to level 1 from default level 2', function () {
-      const expectedPrecision2Circles =  [ { color: '#750000', radius: 48 },
-        { color: '#750000', radius: 48 },
-        { color: '#750000', radius: 44 },
-        { color: '#a40000', radius: 42 },
-        { color: '#a40000', radius: 42 },
-        { color: '#a40000', radius: 40 },
-        { color: '#a40000', radius: 39 },
-        { color: '#b45100', radius: 34 },
-        { color: '#b67501', radius: 28 },
-        { color: '#b67501', radius: 27 },
-        { color: '#b67501', radius: 27 },
-        { color: '#b67501', radius: 26 },
-        { color: '#b67501', radius: 25 },
-        { color: '#b67501', radius: 25 },
-        { color: '#b99939', radius: 21 },
-        { color: '#b99939', radius: 21 },
-        { color: '#b99939', radius: 19 },
-        { color: '#b99939', radius: 18 },
-        { color: '#b99939', radius: 18 },
-        { color: '#b99939', radius: 16 },
-        { color: '#b99939', radius: 15 },
-        { color: '#b99939', radius: 14 },
-        { color: '#b99939', radius: 14 },
-        { color: '#b99939', radius: 12 },
-        { color: '#b99939', radius: 11 },
-        { color: '#b99939', radius: 11 },
-        { color: '#b99939', radius: 11 },
-        { color: '#b99939', radius: 10 },
-        { color: '#b99939', radius: 9 },
-        { color: '#b99939', radius: 9 },
-        { color: '#b99939', radius: 9 },
-        { color: '#b99939', radius: 9 },
-        { color: '#b99939', radius: 8 },
-        { color: '#b99939', radius: 8 },
-        { color: '#b99939', radius: 7 },
-        { color: '#b99939', radius: 7 },
-        { color: '#b99939', radius: 6 },
-        { color: '#b99939', radius: 5 },
-        { color: '#b99939', radius: 5 },
-        { color: '#b99939', radius: 5 },
-        { color: '#b99939', radius: 4 },
-        { color: '#b99939', radius: 4 },
-        { color: '#b99939', radius: 4 },
-        { color: '#b99939', radius: 3 },
-        { color: '#b99939', radius: 2 },
-        { color: '#b99939', radius: 2 }
-      ];
-
-      return PageObjects.visualize.clickMapZoomOut()
-      .then(function () {
-        return PageObjects.visualize.getMapZoomOutEnabled();
-      })
-      // we can tell we're at level 1 because zoom out is disabled
-      .then(function () {
-        return PageObjects.common.try(function tryingForTime() {
-          return PageObjects.visualize.getMapZoomOutEnabled()
-            .then(function (enabled) {
-              //should be able to zoom more as current config has 0 as min level.
-              expect(enabled).to.be(true);
-            });
-        });
-      })
-      .then(function () {
-        return PageObjects.common.try(function tryingForTime() {
-          return PageObjects.visualize.getTileMapData()
-          .then(function (data) {
-            expect(data).to.eql(expectedPrecision2Circles);
-          });
-        });
-      })
-      .then(function takeScreenshot() {
-        PageObjects.common.debug('Take screenshot (success)');
-        PageObjects.common.saveScreenshot('map-after-zoom-from-1-to-2');
-      });
-    });
-
-    bdd.it('Fit data bounds should zoom to level 3', function () {
-      const expectedPrecision2ZoomCircles =   [ { color: '#750000', radius: 192 },
-        { color: '#750000', radius: 191 },
-        { color: '#750000', radius: 177 },
-        { color: '#a40000', radius: 168 },
-        { color: '#a40000', radius: 167 },
-        { color: '#a40000', radius: 159 },
-        { color: '#a40000', radius: 156 },
-        { color: '#b45100', radius: 136 },
-        { color: '#b67501', radius: 111 },
-        { color: '#b67501', radius: 109 },
-        { color: '#b67501', radius: 108 },
-        { color: '#b67501', radius: 104 },
-        { color: '#b67501', radius: 101 },
-        { color: '#b67501', radius: 101 },
-        { color: '#b99939', radius: 84 },
-        { color: '#b99939', radius: 84 },
-        { color: '#b99939', radius: 74 },
-        { color: '#b99939', radius: 73 },
-        { color: '#b99939', radius: 73 },
-        { color: '#b99939', radius: 66 },
-        { color: '#b99939', radius: 60 },
-        { color: '#b99939', radius: 57 },
-        { color: '#b99939', radius: 57 },
-        { color: '#b99939', radius: 47 },
-        { color: '#b99939', radius: 43 },
-        { color: '#b99939', radius: 43 },
-        { color: '#b99939', radius: 43 },
-        { color: '#b99939', radius: 38 },
-        { color: '#b99939', radius: 36 },
-        { color: '#b99939', radius: 35 },
-        { color: '#b99939', radius: 34 },
-        { color: '#b99939', radius: 34 },
-        { color: '#b99939', radius: 31 },
-        { color: '#b99939', radius: 30 },
-        { color: '#b99939', radius: 28 },
-        { color: '#b99939', radius: 27 },
-        { color: '#b99939', radius: 24 },
-        { color: '#b99939', radius: 22 },
-        { color: '#b99939', radius: 19 },
-        { color: '#b99939', radius: 19 },
-        { color: '#b99939', radius: 15 },
-        { color: '#b99939', radius: 15 },
-        { color: '#b99939', radius: 15 },
-        { color: '#b99939', radius: 12 },
-        { color: '#b99939', radius: 9 },
-        { color: '#b99939', radius: 9 }
-      ];
-
-      return PageObjects.visualize.clickMapFitDataBounds()
-      .then(function () {
-        return PageObjects.visualize.getTileMapData();
-      })
-      .then(function (data) {
-        expect(data).to.eql(expectedPrecision2ZoomCircles);
-      });
-    });
-
-    /*
-    ** NOTE: Since we don't have a reliable way to know the zoom level, we can
-    ** check some data after we save the viz, then zoom in and check that the data
-    ** changed, then open the saved viz and check that it's back to the original data.
-    */
-    bdd.it('should save with zoom level and load, take screenshot', function () {
-      const vizName1 = 'Visualization TileMap';
-      const expectedTableData =  [ 'dr4 127', 'dr7 92', '9q5 91', '9qc 89', 'drk 87',
-        'dps 82', 'dph 82', 'dp3 79', 'dpe 78', 'dp8 77'
-      ];
-
-      const expectedTableDataZoomed = [ 'dr5r 21', 'dps8 20', '9q5b 19', 'b6uc 17',
-        '9y63 17', 'c20g 16', 'dqfz 15', 'dr8h 14', 'dp8p 14', 'dp3k 14'
-      ];
-
-      return PageObjects.visualize.clickMapZoomIn()
-      .then(function () {
-        return PageObjects.visualize.clickMapZoomIn();
-      })
-      .then(function (message) {
-        return PageObjects.visualize.saveVisualization(vizName1);
-      })
-      .then(function (message) {
-        PageObjects.common.debug('Saved viz message = ' + message);
-        expect(message).to.be('Visualization Editor: Saved Visualization \"' + vizName1 + '\"');
-      })
-      .then(function testVisualizeWaitForToastMessageGone() {
-        return PageObjects.visualize.waitForToastMessageGone();
-      })
-      .then(function () {
-        return PageObjects.visualize.collapseChart();
-      })
-      // we're not selecting page size all, so we only have to verify the first page of data
-      .then(function getDataTableData() {
-        PageObjects.common.debug('first get the zoom level 5 page data and verify it');
-        return PageObjects.visualize.getDataTableData();
-      })
-      .then(function showData(data) {
-        expect(data.trim().split('\n')).to.eql(expectedTableData);
-        return PageObjects.visualize.collapseChart();
-      })
-      .then(function () {
-        // zoom to level 6, and make sure we go back to the saved level 5
-        return PageObjects.visualize.clickMapZoomIn();
-      })
-      .then(function () {
-        return PageObjects.visualize.collapseChart();
-      })
-      .then(function getDataTableData() {
-        PageObjects.common.debug('second get the zoom level 6 page data and verify it');
-        return PageObjects.visualize.getDataTableData();
-      })
-      .then(function showData(data) {
-        expect(data.trim().split('\n')).to.eql(expectedTableDataZoomed);
-        return PageObjects.visualize.collapseChart();
-      })
-      .then(function () {
-        return PageObjects.visualize.loadSavedVisualization(vizName1);
-      })
-      .then(function waitForVisualization() {
-        return PageObjects.visualize.waitForVisualization();
-      })
-      // sleep a bit before taking the screenshot or it won't show data
-      .then(function sleep() {
-        return PageObjects.common.sleep(4000);
-      })
-      .then(function () {
-        return PageObjects.visualize.collapseChart();
-      })
-      .then(function getDataTableData() {
-        PageObjects.common.debug('third get the zoom level 5 page data and verify it');
-        return PageObjects.visualize.getDataTableData();
-      })
-      .then(function showData(data) {
-        expect(data.trim().split('\n')).to.eql(expectedTableData);
-        return PageObjects.visualize.collapseChart();
-      })
-      .then(function takeScreenshot() {
-        PageObjects.common.debug('Take screenshot');
-        PageObjects.common.saveScreenshot('Visualize-site-map');
-      });
-    });
-
-
-    bdd.it('should zoom in to level 10', function () {
-      // 6
-      return PageObjects.visualize.clickMapZoomIn()
-      .then(function () {
-        // 7
-        return PageObjects.visualize.clickMapZoomIn();
-      })
-      .then(function () {
-        // 8
-        return PageObjects.visualize.clickMapZoomIn();
-      })
-      .then(function () {
-        // 9
-        return PageObjects.visualize.clickMapZoomIn();
-      })
-      .then(function () {
-        return PageObjects.common.try(function tryingForTime() {
-          return PageObjects.visualize.getMapZoomInEnabled()
-            .then(function (enabled) {
-              expect(enabled).to.be(true);
-            });
-        });
-      })
-      .then(function () {
-        return PageObjects.visualize.clickMapZoomIn();
-      })
-      .then(function () {
-        return PageObjects.visualize.getMapZoomInEnabled();
-      })
-      // now we're at level 10 and zoom out should be disabled
-      .then(function (enabled) {
-        expect(enabled).to.be(false);
-      });
-    });
-
-
-  });
-});
+}

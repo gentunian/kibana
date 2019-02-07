@@ -1,69 +1,121 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import { constant, once, compact, flatten } from 'lodash';
-import { promisify, resolve, fromNode } from 'bluebird';
 import { isWorker } from 'cluster';
 import { fromRoot, pkg } from '../utils';
-import Config from './config/config';
+import { Config } from './config';
 import loggingConfiguration from './logging/configuration';
+import configSetupMixin from './config/setup';
+import httpMixin from './http';
+import { loggingMixin } from './logging';
+import warningsMixin from './warnings';
+import { usageMixin } from './usage';
+import { statusMixin } from './status';
+import pidMixin from './pid';
+import { configDeprecationWarningsMixin } from './config/deprecation_warnings';
+import { transformDeprecations } from './config/transform_deprecations';
+import configCompleteMixin from './config/complete';
+import optimizeMixin from '../optimize';
+import * as Plugins from './plugins';
+import { indexPatternsMixin } from './index_patterns';
+import { savedObjectsMixin } from './saved_objects';
+import { sampleDataMixin } from './sample_data';
+import { urlShorteningMixin } from './url_shortening';
+import { serverExtensionsMixin } from './server_extensions';
+import { uiMixin } from '../ui';
+import { sassMixin } from './sass';
+import { i18nMixin } from './i18n';
 
 const rootDir = fromRoot('.');
 
-module.exports = class KbnServer {
-  constructor(settings) {
+export default class KbnServer {
+  constructor(settings, core) {
     this.name = pkg.name;
     this.version = pkg.version;
     this.build = pkg.build || false;
     this.rootDir = rootDir;
     this.settings = settings || {};
 
+    this.core = core;
+
     this.ready = constant(this.mixin(
-      require('./config/setup'), // sets this.config, reads this.settings
-      require('./http'), // sets this.server
-      require('./logging'),
-      require('./config/deprecation_warnings'),
-      require('./warnings'),
-      require('./status'),
+      Plugins.waitForInitSetupMixin,
+
+      // sets this.config, reads this.settings
+      configSetupMixin,
+
+      // sets this.server
+      httpMixin,
+
+      // adds methods for extending this.server
+      serverExtensionsMixin,
+      loggingMixin,
+      configDeprecationWarningsMixin,
+      warningsMixin,
+      usageMixin,
+      statusMixin,
 
       // writes pid file
-      require('./pid'),
+      pidMixin,
 
-      // find plugins and set this.plugins
-      require('./plugins/scan'),
+      // scan translations dirs, register locale files and initialize i18n engine.
+      i18nMixin,
 
-      // disable the plugins that are disabled through configuration
-      require('./plugins/check_enabled'),
-
-      // disable the plugins that are incompatible with the current version of Kibana
-      require('./plugins/check_version'),
+      // find plugins and set this.plugins and this.pluginSpecs
+      Plugins.scanMixin,
 
       // tell the config we are done loading plugins
-      require('./config/complete'),
+      configCompleteMixin,
 
-      // setup this.uiExports and this.bundles
-      require('../ui'),
+      // setup this.uiExports and this.uiBundles
+      uiMixin,
+      indexPatternsMixin,
 
-      // setup server.uiSettings
-      require('../ui/settings'),
+      // setup saved object routes
+      savedObjectsMixin,
+
+      // setup routes for installing/uninstalling sample data sets
+      sampleDataMixin,
+
+      // setup routes for short urls
+      urlShorteningMixin,
 
       // ensure that all bundles are built, or that the
-      // lazy bundle server is running
-      require('../optimize'),
+      // watch bundle server is running
+      optimizeMixin,
 
-      // finally, initialize the plugins
-      require('./plugins/initialize'),
+      // transpiles SCSS into CSS
+      sassMixin,
 
-      () => {
-        if (this.config.get('server.autoListen')) {
-          this.ready = constant(resolve());
-          return this.listen();
-        }
-      }
+      // initialize the plugins
+      Plugins.initializeMixin,
+
+      // notify any deferred setup logic that plugins have initialized
+      Plugins.waitForInitResolveMixin,
     ));
 
     this.listen = once(this.listen);
   }
 
   /**
-   * Extend the KbnServer outside of the constraits of a plugin. This allows access
+   * Extend the KbnServer outside of the constraints of a plugin. This allows access
    * to APIs that are not exposed (intentionally) to the plugins and should only
    * be used when the code will be kept up to date with Kibana.
    *
@@ -85,47 +137,55 @@ module.exports = class KbnServer {
    * @return undefined
    */
   async listen() {
+    await this.ready();
+
     const { server, config } = this;
 
-    await this.ready();
-    await fromNode(cb => server.start(cb));
+    await server.kibanaMigrator.awaitMigration();
 
     if (isWorker) {
       // help parent process know when we are ready
       process.send(['WORKER_LISTENING']);
     }
 
-    server.log(['listening', 'info'], `Server running at ${server.info.uri}`);
+    server.log(['listening', 'info'], `Server running at ${server.info.uri}${
+      config.get('server.rewriteBasePath')
+        ? config.get('server.basePath')
+        : ''
+    }`);
+
     return server;
   }
 
   async close() {
-    await fromNode(cb => this.server.stop(cb));
+    if (!this.server) {
+      return;
+    }
+
+    await this.server.stop();
   }
 
   async inject(opts) {
-    if (!this.server) await this.ready();
+    if (!this.server) {
+      await this.ready();
+    }
 
-    return await fromNode(cb => {
-      try {
-        this.server.inject(opts, (resp) => {
-          cb(null, resp);
-        });
-      } catch (err) {
-        cb(err);
-      }
-    });
+    return await this.server.inject(opts);
   }
 
   applyLoggingConfiguration(settings) {
-    const config = Config.withDefaultSchema(settings);
+    const config = new Config(
+      this.config.getSchema(),
+      transformDeprecations(settings)
+    );
+
     const loggingOptions = loggingConfiguration(config);
     const subset = {
       ops: config.get('ops'),
-      logging: config.get('logging')
+      logging: config.get('logging'),
     };
     const plain = JSON.stringify(subset, null, 2);
     this.server.log(['info', 'config'], 'New logging configuration:\n' + plain);
-    this.server.plugins['even-better'].monitor.reconfigure(loggingOptions);
+    this.server.plugins['@elastic/good'].reconfigure(loggingOptions);
   }
-};
+}

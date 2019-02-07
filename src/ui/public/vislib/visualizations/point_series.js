@@ -1,18 +1,36 @@
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 import d3 from 'd3';
 import _ from 'lodash';
 import $ from 'jquery';
-import errors from 'ui/errors';
-import TooltipProvider from 'ui/vis/components/tooltip';
-import VislibVisualizationsChartProvider from './_chart';
-import VislibVisualizationsTimeMarkerProvider from './time_marker';
-import VislibVisualizationsSeriTypesProvider from './point_series/series_types';
+import { TooltipProvider } from '../../vis/components/tooltip';
+import { VislibVisualizationsChartProvider } from './_chart';
+import { VislibVisualizationsTimeMarkerProvider } from './time_marker';
+import { VislibVisualizationsSeriesTypesProvider } from './point_series/series_types';
 
-export default function PointSeriesFactory(Private) {
+export function VislibVisualizationsPointSeriesProvider(Private) {
 
   const Chart = Private(VislibVisualizationsChartProvider);
   const Tooltip = Private(TooltipProvider);
   const TimeMarker = Private(VislibVisualizationsTimeMarkerProvider);
-  const seriTypes = Private(VislibVisualizationsSeriTypesProvider);
+  const seriTypes = Private(VislibVisualizationsSeriesTypesProvider);
   const touchdownTmpl = _.template(require('../partials/touchdown.tmpl.html'));
   /**
    * Line Chart Visualization
@@ -33,11 +51,6 @@ export default function PointSeriesFactory(Private) {
       this.chartEl = chartEl;
       this.chartConfig = this.findChartConfig();
       this.handler.pointSeries = this;
-
-      const seriesLimit = 25;
-      if (this.chartConfig.series.length > seriesLimit) {
-        throw new errors.VislibError('There are too many series defined.');
-      }
     }
 
     findChartConfig() {
@@ -46,18 +59,30 @@ export default function PointSeriesFactory(Private) {
       return charts[chartIndex];
     }
 
+    getSeries(seriesId) {
+      return this.series.find(series => series.chartData.aggId === seriesId);
+    }
+
     addBackground(svg, width, height) {
       const startX = 0;
       const startY = 0;
 
       return svg
-      .append('rect')
-      .attr('x', startX)
-      .attr('y', startY)
-      .attr('width', width)
-      .attr('height', height)
-      .attr('fill', 'transparent')
-      .attr('class', 'background');
+        .append('rect')
+        .attr('x', startX)
+        .attr('y', startY)
+        .attr('width', width)
+        .attr('height', height)
+        .attr('fill', 'transparent')
+        .attr('class', 'background');
+    }
+
+    addGrid(svg) {
+      const { width, height } = svg.node().getBBox();
+      return svg
+        .append('g')
+        .attr('class', 'grid')
+        .call(this.handler.grid.draw(width, height));
     }
 
     addClipPath(svg) {
@@ -68,13 +93,13 @@ export default function PointSeriesFactory(Private) {
 
       // Creating clipPath
       return svg
-      .append('clipPath')
-      .attr('id', this.clipPathId)
-      .append('rect')
-      .attr('x', startX)
-      .attr('y', startY)
-      .attr('width', width)
-      .attr('height', height);
+        .append('clipPath')
+        .attr('id', this.clipPathId)
+        .append('rect')
+        .attr('x', startX)
+        .attr('y', startY)
+        .attr('width', width)
+        .attr('height', height);
     }
 
     addEvents(svg) {
@@ -102,19 +127,21 @@ export default function PointSeriesFactory(Private) {
       // outside of them so we will use these values rather than ordered.min/max
       const oneUnit = (ordered.units || _.identity)(1);
 
+      const drawInverted = isHorizontal || xAxis.axisConfig.get('scale.inverted', false);
+      const size = isHorizontal ? width : height;
       // points on this axis represent the amount of time they cover,
       // so draw the endzones at the actual time bounds
       const leftEndzone = {
-        x: isHorizontal ? 0 : Math.max(xScale(ordered.min), 0),
-        w: isHorizontal ? Math.max(xScale(ordered.min), 0) : height - Math.max(xScale(ordered.min), 0)
+        x: drawInverted ? 0 : Math.max(xScale(ordered.min), 0),
+        w: drawInverted ? Math.max(xScale(ordered.min), 0) : height - Math.max(xScale(ordered.min), 0)
       };
 
       const expandLastBucket = xAxis.axisConfig.get('scale.expandLastBucket');
       const rightLastVal = expandLastBucket ? ordered.max : Math.min(ordered.max, _.last(xAxis.values));
       const rightStart = rightLastVal + oneUnit;
       const rightEndzone = {
-        x: isHorizontal ? xScale(rightStart) : 0,
-        w: isHorizontal ? Math.max(width - xScale(rightStart), 0) : xScale(rightStart)
+        x: drawInverted ? xScale(rightStart) : 0,
+        w: drawInverted ? Math.max(size - xScale(rightStart), 0) : xScale(rightStart)
       };
 
       this.endzones = svg.selectAll('.layer')
@@ -144,8 +171,8 @@ export default function PointSeriesFactory(Private) {
         const wholeBucket = boundData && boundData.x != null;
 
         // the min and max that the endzones start in
-        const min = isHorizontal ? leftEndzone.w : rightEndzone.w;
-        const max = isHorizontal ? rightEndzone.x : leftEndzone.x;
+        const min = drawInverted ? leftEndzone.w : rightEndzone.w;
+        const max = drawInverted ? rightEndzone.x : leftEndzone.x;
 
         // bounds of the cursor to consider
         let xLeft = isHorizontal ? mouseChartXCoord : mouseChartYCoord;
@@ -193,15 +220,11 @@ export default function PointSeriesFactory(Private) {
     draw() {
       const self = this;
       const $elem = $(this.chartEl);
-      const margin = this.handler.visConfig.get('style.margin');
       const width = this.chartConfig.width = $elem.width();
       const height = this.chartConfig.height = $elem.height();
       const xScale = this.handler.categoryAxes[0].getScale();
-      const minWidth = 50;
-      const minHeight = 50;
       const addTimeMarker = this.chartConfig.addTimeMarker;
       const times = this.chartConfig.times || [];
-      let timeMarker;
       let div;
       let svg;
 
@@ -209,21 +232,15 @@ export default function PointSeriesFactory(Private) {
         selection.each(function (data) {
           const el = this;
 
-          if (width < minWidth || height < minHeight) {
-            throw new errors.ContainerTooSmall();
-          }
-
-          if (addTimeMarker) {
-            timeMarker = new TimeMarker(times, xScale, height);
-          }
-
           div = d3.select(el);
 
           svg = div.append('svg')
-          .attr('width', width)
-          .attr('height', height);
+            .attr('focusable', 'false')
+            .attr('width', width)
+            .attr('height', height);
 
           self.addBackground(svg, width, height);
+          self.addGrid(svg);
           self.addClipPath(svg);
           self.addEvents(svg);
           self.createEndZones(svg);
@@ -232,7 +249,7 @@ export default function PointSeriesFactory(Private) {
           self.series = [];
           _.each(self.chartConfig.series, (seriArgs, i) => {
             if (!seriArgs.show) return;
-            const SeriClass = seriTypes[seriArgs.type || self.handler.visConfig.get('chart.type')];
+            const SeriClass = seriTypes[seriArgs.type || self.handler.visConfig.get('chart.type')] || seriTypes.line;
             const series = new SeriClass(self.handler, svg, data.series[i], seriArgs);
             series.events = self.events;
             svg.call(series.draw());
@@ -240,7 +257,13 @@ export default function PointSeriesFactory(Private) {
           });
 
           if (addTimeMarker) {
-            timeMarker.render(svg);
+            //Domain end of 'now' will be milliseconds behind current time
+            //Extend toTime by 1 minute to ensure those cases have a TimeMarker
+            const toTime = new Date(xScale.domain()[1].getTime() + 60000);
+            const currentTime = new Date();
+            if (toTime > currentTime) {
+              new TimeMarker(times, xScale, height).render(svg);
+            }
           }
 
           return svg;
